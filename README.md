@@ -38,7 +38,7 @@ Even if a laptop is lost, stolen, or emotionally compromised:
   On login, enjoy a random blessing from:
   - **Lumpy Space Princess from Adventure Time**
   - **DMV Sloth from Zootopia**  
-  (They cannot help you, but they will emotionally define you and hopefully leave you with a smile.)
+  - (They cannot help you, but they will emotionally define you and hopefully leave you with a smile.)
 
 - **💨 Zero Key Rot**
   Every 12 hours, certs evaporate into the void.
