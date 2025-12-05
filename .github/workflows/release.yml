@@ -26,8 +26,73 @@ jobs:
       - name: Install create-dmg
         run: brew install create-dmg
 
-      - name: Build macOS app bundle and DMG
-        run: make app-bundle dmg VERSION=${{ steps.version.outputs.VERSION }}
+      - name: Build macOS app bundle
+        run: make app-bundle VERSION=${{ steps.version.outputs.VERSION }}
+
+      - name: Import signing certificate
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm "$CERT_PATH"
+
+          # Add to search list
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Allow codesign to access keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Sign app bundle
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+        run: |
+          codesign --force --options runtime --sign "$APPLE_DEVELOPER_ID" \
+            --entitlements packaging/macos/entitlements.plist \
+            --deep build/cassh.app
+
+          # Verify signature
+          codesign --verify --verbose build/cassh.app
+
+      - name: Create DMG
+        run: make dmg-only VERSION=${{ steps.version.outputs.VERSION }}
+
+      - name: Sign DMG
+        if: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+        run: |
+          codesign --force --sign "$APPLE_DEVELOPER_ID" "dist/cassh-${{ steps.version.outputs.VERSION }}.dmg"
+
+      - name: Notarize DMG
+        if: ${{ secrets.APPLE_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Submit for notarization
+          xcrun notarytool submit "dist/cassh-${{ steps.version.outputs.VERSION }}.dmg" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # Staple the ticket to the DMG
+          xcrun stapler staple "dist/cassh-${{ steps.version.outputs.VERSION }}.dmg"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
