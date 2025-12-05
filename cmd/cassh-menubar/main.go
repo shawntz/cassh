@@ -1,3 +1,5 @@
+//go:build darwin
+
 // cassh-menubar is the macOS menu bar application
 // It shows cert status and handles automatic cert installation
 package main

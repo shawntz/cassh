@@ -9,7 +9,3 @@ linters:
   default: standard
   enable:
     - errcheck
-  exclusions:
-    # Exclude macOS-only menubar app (requires systray which needs GTK on Linux)
-    paths:
-      - cmd/cassh-menubar
