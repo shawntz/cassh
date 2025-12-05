@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -185,7 +186,8 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 
 	// Load CA private key - from env var or file
 	if v := os.Getenv("CASSH_CA_PRIVATE_KEY"); v != "" {
-		config.CAPrivateKey = v
+		// Handle escaped newlines from cloud platform env vars
+		config.CAPrivateKey = strings.ReplaceAll(v, "\\n", "\n")
 	} else if config.CAPrivateKeyPath != "" {
 		keyData, err := os.ReadFile(config.CAPrivateKeyPath)
 		if err != nil {
