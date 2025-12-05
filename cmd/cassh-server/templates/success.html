@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cassh - Certificate Ready</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            padding: 2rem;
+        }
+
+        .dev-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #b45309;
+            color: #fff;
+            text-align: center;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 540px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .user-info {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .quote {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+            color: #888;
+            font-style: italic;
+        }
+
+        .cert-box {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .cert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .cert-header h3 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #888;
+        }
+
+        .copy-btn {
+            background: #222;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.15s;
+        }
+
+        .copy-btn:hover {
+            background: #333;
+        }
+
+        .cert-textarea {
+            width: 100%;
+            height: 100px;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 6px;
+            color: #666;
+            font-family: 'SF Mono', Menlo, monospace;
+            font-size: 0.7rem;
+            padding: 0.75rem;
+            resize: none;
+        }
+
+        .cert-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .info-item {
+            background: #0a0a0a;
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+
+        .info-label {
+            color: #444;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            color: #999;
+            font-size: 0.85rem;
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+
+        .info-value.valid {
+            color: #22c55e;
+        }
+
+        .instructions {
+            background: #111;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .instructions h3 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            color: #888;
+        }
+
+        .instructions ol {
+            margin-left: 1.25rem;
+            color: #666;
+            font-size: 0.85rem;
+            line-height: 1.7;
+        }
+
+        .instructions code {
+            background: #0a0a0a;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'SF Mono', Menlo, monospace;
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        .auto-install-btn {
+            width: 100%;
+            background: #fff;
+            color: #000;
+            border: none;
+            padding: 0.875rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+
+        .auto-install-btn:hover {
+            opacity: 0.9;
+        }
+
+        .auto-install-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .footer {
+            margin-top: 1.5rem;
+            color: #444;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .footer a {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    {{if .DevMode}}
+    <div class="dev-banner">Development mode - this certificate is for testing only</div>
+    {{end}}
+
+    <div class="container">
+        <h1>Certificate ready</h1>
+        <p class="user-info">{{.User.Email}}</p>
+
+        <div class="quote">
+            "{{.Meme.Quote}}"
+        </div>
+
+        <div class="cert-box">
+            <div class="cert-header">
+                <h3>SSH Certificate</h3>
+                <button class="copy-btn" onclick="copyCert()">Copy</button>
+            </div>
+            <textarea class="cert-textarea" id="certData" readonly>{{.Cert}}</textarea>
+
+            <div class="cert-info">
+                <div class="info-item">
+                    <div class="info-label">Expires</div>
+                    <div class="info-value valid">{{.CertInfo.ValidBefore.Format "Jan 2, 15:04"}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Time left</div>
+                    <div class="info-value">{{printf "%.0f" .CertInfo.TimeLeft.Hours}}h</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>Manual install</h3>
+            <ol>
+                <li>Save to <code>~/.ssh/cassh_id_ed25519-cert.pub</code></li>
+                <li>Run <code>ssh-add ~/.ssh/cassh_id_ed25519</code></li>
+            </ol>
+        </div>
+
+        <button class="auto-install-btn" onclick="autoInstall()">
+            Install to cassh.app
+        </button>
+
+        <p class="footer">
+            <a href="/">Generate another</a>
+        </p>
+    </div>
+
+    <script>
+        function copyCert() {
+            const textarea = document.getElementById('certData');
+            textarea.select();
+            document.execCommand('copy');
+
+            const btn = document.querySelector('.copy-btn');
+            btn.textContent = 'Copied';
+            setTimeout(() => btn.textContent = 'Copy', 1500);
+        }
+
+        async function autoInstall() {
+            const cert = document.getElementById('certData').value;
+            const btn = document.querySelector('.auto-install-btn');
+
+            btn.textContent = 'Installing...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('http://localhost:52849/install-cert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cert: cert }),
+                });
+
+                if (response.ok) {
+                    btn.textContent = 'Installed';
+                } else {
+                    throw new Error();
+                }
+            } catch (err) {
+                btn.textContent = 'cassh.app not running';
+                setTimeout(() => {
+                    btn.textContent = 'Install to cassh.app';
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+</html>
