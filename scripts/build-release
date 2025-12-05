@@ -76,17 +76,21 @@ echo ""
 
 # Step 3: Create DMG
 echo -e "${GREEN}[3/4]${NC} Creating DMG installer..."
+# Create dist directory before sudo so it's user-owned
+mkdir -p dist
 if [ "$EUID" -ne 0 ]; then
-    sudo make dmg
+    sudo make dmg-only
+    # Fix ownership of files created by sudo
+    sudo chown -R "$USER" dist/
 else
-    make dmg
+    make dmg-only
 fi
 echo -e "${GREEN}✓${NC} DMG created"
 echo ""
 
 # Step 4: Create PKG
 echo -e "${GREEN}[4/4]${NC} Creating PKG installer..."
-make pkg
+make pkg-only
 echo -e "${GREEN}✓${NC} PKG created"
 echo ""
 

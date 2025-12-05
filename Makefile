@@ -21,7 +21,7 @@ APPLE_KEYCHAIN_PROFILE ?= cassh-notarize
 
 .PHONY: all clean deps build build-oss build-enterprise \
         server menubar cli \
-        app-bundle dmg pkg \
+        app-bundle dmg dmg-only pkg pkg-only \
         sign notarize \
         test lint
 
@@ -76,6 +76,7 @@ build-enterprise: build
 # =============================================================================
 app-bundle: menubar
 	@echo "Creating macOS app bundle..."
+	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(APP_BUNDLE)/Contents/MacOS
 	@mkdir -p $(APP_BUNDLE)/Contents/Resources
 
@@ -104,9 +105,12 @@ app-bundle: menubar
 # DMG Creation (requires sudo for disk image mounting)
 # Usage: sudo make dmg
 # =============================================================================
-dmg: app-bundle
+dmg: app-bundle dmg-only
+
+dmg-only:
 	@echo "Creating DMG installer..."
 	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/cassh-$(VERSION).dmg
 
 	# Create DMG with create-dmg (brew install create-dmg)
 	@if command -v create-dmg &> /dev/null; then \
@@ -132,9 +136,12 @@ dmg: app-bundle
 # =============================================================================
 # PKG Creation (for MDM deployment)
 # =============================================================================
-pkg: app-bundle
+pkg: app-bundle pkg-only
+
+pkg-only:
 	@echo "Creating PKG installer for MDM..."
 	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/cassh-$(VERSION).pkg
 
 	# Build component package
 	pkgbuild \
