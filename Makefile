@@ -146,7 +146,7 @@ pkg-only:
 	# Build component package
 	pkgbuild \
 		--root $(APP_BUNDLE) \
-		--identifier com.shawntz.cassh \
+		--identifier com.shawnschwartz.cassh \
 		--version $(VERSION) \
 		--install-location /Applications/cassh.app \
 		--scripts packaging/macos/scripts \
@@ -198,14 +198,14 @@ endif
 install-launchagent:
 	@echo "Installing LaunchAgent..."
 	@mkdir -p ~/Library/LaunchAgents
-	@cp packaging/macos/com.shawntz.cassh.plist ~/Library/LaunchAgents/
-	@launchctl load ~/Library/LaunchAgents/com.shawntz.cassh.plist
+	@cp packaging/macos/com.shawnschwartz.cassh.plist ~/Library/LaunchAgents/
+	@launchctl load ~/Library/LaunchAgents/com.shawnschwartz.cassh.plist
 	@echo "cassh will now start automatically on login"
 
 uninstall-launchagent:
 	@echo "Removing LaunchAgent..."
-	@launchctl unload ~/Library/LaunchAgents/com.shawntz.cassh.plist 2>/dev/null || true
-	@rm -f ~/Library/LaunchAgents/com.shawntz.cassh.plist
+	@launchctl unload ~/Library/LaunchAgents/com.shawnschwartz.cassh.plist 2>/dev/null || true
+	@rm -f ~/Library/LaunchAgents/com.shawnschwartz.cassh.plist
 	@echo "LaunchAgent removed"
 
 # =============================================================================

@@ -74,7 +74,7 @@ The PKG installs:
 |------|----------|
 | `/Applications/cassh.app` | The menu bar app |
 | `~/Library/Application Support/cassh/cassh.policy.toml` | Policy config |
-| `~/Library/LaunchAgents/com.shawntz.cassh.plist` | Auto-start agent |
+| `~/Library/LaunchAgents/com.shawnschwartz.cassh.plist` | Auto-start agent |
 
 ### Deploy via MDM
 
@@ -122,13 +122,13 @@ Or manually:
 
 ```bash
 mkdir -p ~/Library/LaunchAgents
-cat > ~/Library/LaunchAgents/com.shawntz.cassh.plist << 'EOF'
+cat > ~/Library/LaunchAgents/com.shawnschwartz.cassh.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.shawntz.cassh</string>
+    <string>com.shawnschwartz.cassh</string>
     <key>ProgramArguments</key>
     <array>
         <string>/Applications/cassh.app/Contents/MacOS/cassh</string>
@@ -141,7 +141,7 @@ cat > ~/Library/LaunchAgents/com.shawntz.cassh.plist << 'EOF'
 </plist>
 EOF
 
-launchctl load ~/Library/LaunchAgents/com.shawntz.cassh.plist
+launchctl load ~/Library/LaunchAgents/com.shawnschwartz.cassh.plist
 ```
 
 ---

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>cassh - SSH Certificate Manager</title>
-    <organization>com.shawntz</organization>
+    <organization>com.shawnschwartz</organization>
     <domains enable_localSystem="true" enable_currentUserHome="false"/>
 
     <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
@@ -12,15 +12,15 @@
 
     <choices-outline>
         <line choice="default">
-            <line choice="com.shawntz.cassh"/>
+            <line choice="com.shawnschwartz.cassh"/>
         </line>
     </choices-outline>
 
     <choice id="default"/>
 
-    <choice id="com.shawntz.cassh" visible="false">
-        <pkg-ref id="com.shawntz.cassh"/>
+    <choice id="com.shawnschwartz.cassh" visible="false">
+        <pkg-ref id="com.shawnschwartz.cassh"/>
     </choice>
 
-    <pkg-ref id="com.shawntz.cassh" version="0.1.0" onConclusion="none">cassh-component.pkg</pkg-ref>
+    <pkg-ref id="com.shawnschwartz.cassh" version="0.1.0" onConclusion="none">cassh-component.pkg</pkg-ref>
 </installer-gui-script>

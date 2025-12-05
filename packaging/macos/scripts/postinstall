@@ -6,8 +6,8 @@ set -e
 
 APP_PATH="/Applications/cassh.app"
 POLICY_PATH="$APP_PATH/Contents/Resources/cassh.policy.toml"
-LAUNCH_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawntz.cassh.plist"
-LAUNCH_AGENT_DST="/Library/LaunchAgents/com.shawntz.cassh.plist"
+LAUNCH_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawnschwartz.cassh.plist"
+LAUNCH_AGENT_DST="/Library/LaunchAgents/com.shawnschwartz.cassh.plist"
 
 # Make policy file immutable
 if [ -f "$POLICY_PATH" ]; then

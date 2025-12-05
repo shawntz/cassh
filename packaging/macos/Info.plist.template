@@ -9,7 +9,7 @@
     <key>CFBundleIconFile</key>
     <string>cassh.icns</string>
     <key>CFBundleIdentifier</key>
-    <string>com.shawntz.cassh</string>
+    <string>com.shawnschwartz.cassh</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

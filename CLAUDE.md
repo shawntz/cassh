@@ -67,7 +67,7 @@ internal/
 packaging/macos/      # macOS distribution files
   Info.plist.template
   entitlements.plist
-  com.shawntz.cassh.plist  # LaunchAgent
+  com.shawnschwartz.cassh.plist  # LaunchAgent
   distribution.xml         # PKG installer
   scripts/                 # Install scripts
   resources/               # PKG resources (HTML)
