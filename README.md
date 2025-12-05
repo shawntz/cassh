@@ -70,30 +70,36 @@ Then boom — new SSH cert, green dot, go commit code.
 
 ## Architecture
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
-│  Menu Bar   │────▶│    cassh    │────▶│    Microsoft    │
-│    App      │     │   Server    │     │     Entra ID    │
-└─────────────┘     └─────────────┘     └─────────────────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │  Internal   │
-                    │     CA      │
-                    └─────────────┘
-                           │
-                           ▼
-                    ┌─────────────────┐
-                    │    GitHub       │
-                    │   Enterprise    │
-                    └─────────────────┘
+```mermaid
+flowchart LR
+    subgraph Client
+        A[Menu Bar App]
+    end
+
+    subgraph Server
+        B[cassh Server]
+        C[Internal CA]
+    end
+
+    subgraph External
+        D[Microsoft Entra ID]
+        E[GitHub Enterprise]
+    end
+
+    A -->|1. Request cert| B
+    B -->|2. OIDC auth| D
+    D -->|3. Identity verified| B
+    B -->|4. Sign pubkey| C
+    C -->|5. SSH certificate| B
+    B -->|6. Return cert| A
+    A -->|7. SSH with cert| E
 ```
 
 ---
 
 ## Support the Project
 
-`cassh`` is built and maintained by [Shawn Schwartz](https://shawnschwartz.com), a PhD candidate in Psychology at Stanford where he studies attention and memory using neuroimaging — and teaches courses on research methods, data science, and computer science. By day, he builds software and hardware interfaces for cognitive neuroscience research. By night (and weekends), he tinkers with DevSecOps and builds tools like this one.
+`cassh` is built and maintained by [Shawn Schwartz](https://shawnschwartz.com), a PhD candidate in Psychology at Stanford where he studies attention and memory using neuroimaging — and teaches courses on research methods, data science, and computer science. By day, he builds software and hardware interfaces for cognitive neuroscience research. By night (and weekends), he tinkers with DevSecOps and builds tools like this one.
 
 I started `cassh` because managing SSH keys across a team is a nightmare, and I kept thinking "there has to be a better way." Then I spent 18 weeks working [@slackhq](https://github.com/slackhq), and there I learned that ephemeral certificates are that better way.
 
