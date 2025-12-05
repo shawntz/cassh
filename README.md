@@ -1,5 +1,7 @@
 <div align="center">
-  <img src="docs/assets/logo.svg" alt="cassh logo" width="128" height="128">
+  <picture>
+    <img src="docs/assets/logo.svg" alt="cassh logo" width="100" height="100">
+  </picture>
   <h1>cassh</h1>
   <p><strong>Ephemeral SSH Certificates for GitHub Enterprise</strong></p>
   <p>
