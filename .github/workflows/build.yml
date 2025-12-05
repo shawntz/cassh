@@ -1,0 +1,150 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+  build-server:
+    name: Build Server
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build server
+        run: |
+          mkdir -p build
+          go build -o build/cassh-server ./cmd/cassh-server
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cassh-server-linux
+          path: build/cassh-server
+
+  build-cli:
+    name: Build CLI
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build CLI
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p build
+          go build -o build/cassh-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/cassh-cli
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cassh-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/cassh-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  build-macos-app:
+    name: Build macOS App
+    runs-on: macos-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build menubar app (Intel)
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+          GOARCH: amd64
+        run: |
+          mkdir -p build/amd64
+          go build -o build/amd64/cassh-menubar ./cmd/cassh-menubar
+
+      - name: Build menubar app (Apple Silicon)
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+          GOARCH: arm64
+        run: |
+          mkdir -p build/arm64
+          go build -o build/arm64/cassh-menubar ./cmd/cassh-menubar
+
+      - name: Create universal binary
+        run: |
+          mkdir -p build/universal
+          lipo -create -output build/universal/cassh-menubar \
+            build/amd64/cassh-menubar \
+            build/arm64/cassh-menubar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cassh-menubar-macos-universal
+          path: build/universal/cassh-menubar
