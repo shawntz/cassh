@@ -26,3 +26,6 @@ services:
       # CA Private Key (paste full key content)
       - key: CASSH_CA_PRIVATE_KEY
         sync: false
+      # Certificate validity in hours (optional, default: 12)
+      - key: CASSH_CERT_VALIDITY_HOURS
+        sync: false
