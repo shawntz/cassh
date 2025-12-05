@@ -4,11 +4,12 @@ version: "2"
 
 run:
   timeout: 5m
-  # Exclude macOS-only menubar app (requires systray which needs GTK on Linux)
-  exclude-dirs:
-    - cmd/cassh-menubar
 
 linters:
   default: standard
   enable:
     - errcheck
+  exclusions:
+    # Exclude macOS-only menubar app (requires systray which needs GTK on Linux)
+    paths:
+      - cmd/cassh-menubar
