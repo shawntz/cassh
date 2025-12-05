@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shawntz.cassh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/cassh.app/Contents/MacOS/cassh</string>
+    </array>
+
+    <!-- Start on login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep running -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Restart if crashed -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/tmp/cassh.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/cassh.err.log</string>
+
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>
