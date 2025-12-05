@@ -269,7 +269,7 @@ func openBrowser(url string) error {
 }
 
 func showAbout() {
-	_ = openBrowser("https://github.com/shawntz/cassh")
+	_ = openBrowser("https://shawnschwartz.com/cassh")
 }
 
 // monitorCertificate periodically checks cert status
