@@ -1,6 +1,15 @@
-# `cassh` 💰💰💰
+<div align="center">
+  <img src="docs/assets/logo.svg" alt="cassh logo" width="128" height="128">
+  <h1>cassh</h1>
+  <p><strong>Ephemeral SSH Certificates for GitHub Enterprise</strong></p>
+  <p>
+    <a href="https://github.com/shawntz/cassh/releases"><img src="https://img.shields.io/github/v/release/shawntz/cassh" alt="Release"></a>
+    <a href="https://github.com/shawntz/cassh/blob/main/LICENSE"><img src="https://img.shields.io/github/license/shawntz/cassh" alt="License"></a>
+    <a href="https://shawntz.github.io/cassh"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+  </p>
+</div>
 
-### Ephemeral SSH Certificates for GitHub Enterprise
+---
 
 `cassh` is an ephemeral SSH certificate system designed for GitHub Enterprise access.
 Developed for [@ghostehq](https://github.com/ghostehq). Inspired by internal tooling [@slackhq](https://github.com/slackhq).
@@ -16,7 +25,7 @@ Developed for [@ghostehq](https://github.com/ghostehq). Inspired by internal too
 Permanent SSH keys are a liability. If a laptop is lost, stolen, or compromised:
 
 - **With permanent keys:** Manual revocation required, often missed
-- **With cassh:** Certificate expires automatically, zero action needed
+- **With `cassh`:** Certificate expires automatically, zero action needed
 
 ## Features
 
@@ -24,37 +33,46 @@ Permanent SSH keys are a liability. If a laptop is lost, stolen, or compromised:
 - **Entra SSO Integration** - Sign in with your Microsoft identity
 - **macOS Menu Bar App** - Shows cert status (green = valid, red = expired)
 - **CLI for servers/CI** - Headless certificate generation
-- **Meme Landing Page** - LSP or Flash Slothmore from the DMV to greet you on login
+- **Meme Landing Page** - LSP or Flash Slothmore greet you on login
 
+## Quick Start
 
-- **🟢 macOS Menu Bar Status Dot**
-  - Green — your cert is valid, go forth and merge.
-  - Red — regenerate before you `git push` sadness.
+```bash
+# Clone and build
+git clone https://github.com/shawntz/cassh.git
+cd cassh
+make build
 
-- **🎭 Meme Landing Page Rotation**
-  On login, enjoy a random blessing from:
-  - **Lumpy Space Princess from Adventure Time**
-  - **DMV Sloth from Zootopia**  
-  - (They cannot help you, but they will emotionally define you and hopefully leave you with a smile.)
+# Generate dev CA and run locally
+make dev-ca
+make dev-server
+```
 
-- **💨 Zero Key Rot**
-  Every 12 hours, certs evaporate into the void.
+See the **[Full Documentation](https://shawntz.github.io/cassh)** for complete setup, deployment, and configuration guides.
 
-## Setup & Installation
+## Documentation
 
-### Login Experience (artistically cursed)
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](https://shawntz.github.io/cassh/getting-started/) | Prerequisites and initial setup |
+| [Server Setup](https://shawntz.github.io/cassh/server-setup/) | CA keys, Entra app, configuration |
+| [Deployment](https://shawntz.github.io/cassh/deployment/) | Fly.io, Render, Railway, VPS |
+| [Client Distribution](https://shawntz.github.io/cassh/client/) | MDM deployment, PKG/DMG builds |
+| [Configuration Reference](https://shawntz.github.io/cassh/configuration/) | All config options explained |
 
-- You click "Generate cert"
-- Browser opens to cassh portal
-- LSP: *"Oh my GLOB just click the button"*
-- OR Sloth: *"pl…ease… wai…t…"*
+## Roadmap
 
-Then boom — new SSH cert, green dot, go commit code.
+See the [full roadmap](https://shawntz.github.io/cassh/roadmap/) for details.
 
----
+| Status | Feature |
+|--------|---------|
+| :white_check_mark: | macOS menu bar app with certificate status |
+| :white_check_mark: | Microsoft Entra ID (Azure AD) SSO |
+| :white_check_mark: | 12-hour ephemeral SSH certificates |
+| :white_check_mark: | Meme landing page (LSP & Sloth) |
+| :memo: | Hardware key support (YubiKey) |
 
-
----
+**Legend:** :white_check_mark: Complete | :construction: In Progress | :memo: Planned
 
 ## Security
 
