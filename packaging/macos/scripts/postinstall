@@ -1,0 +1,31 @@
+#!/bin/bash
+# Post-install script for cassh PKG
+# Runs after the app is installed to /Applications
+
+set -e
+
+APP_PATH="/Applications/cassh.app"
+POLICY_PATH="$APP_PATH/Contents/Resources/cassh.policy.toml"
+LAUNCH_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawntz.cassh.plist"
+LAUNCH_AGENT_DST="/Library/LaunchAgents/com.shawntz.cassh.plist"
+
+# Make policy file immutable
+if [ -f "$POLICY_PATH" ]; then
+  chmod 444 "$POLICY_PATH"
+  chflags uchg "$POLICY_PATH" 2>/dev/null || true
+fi
+
+# Install LaunchAgent for all users (requires admin)
+if [ -f "$LAUNCH_AGENT_SRC" ]; then
+  cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST"
+  chmod 644 "$LAUNCH_AGENT_DST"
+  chown root:wheel "$LAUNCH_AGENT_DST"
+fi
+
+# Load LaunchAgent for current console user
+CONSOLE_USER=$(stat -f "%Su" /dev/console)
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+  sudo -u "$CONSOLE_USER" launchctl load "$LAUNCH_AGENT_DST" 2>/dev/null || true
+fi
+
+exit 0
