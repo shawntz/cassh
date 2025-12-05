@@ -70,7 +70,10 @@ See the [full roadmap](https://shawntz.github.io/cassh/roadmap/) for details.
 | :white_check_mark: | Microsoft Entra ID (Azure AD) SSO |
 | :white_check_mark: | 12-hour ephemeral SSH certificates |
 | :white_check_mark: | Meme landing page (LSP & Sloth) |
+| :construction: | VerifyPolicyIntegrity: Verify cryptographic signature |
+| :memo: | Slack expiration notifications |
 | :memo: | Hardware key support (YubiKey) |
+| :memo: | Group-based access policies |
 
 **Legend:** :white_check_mark: Complete | :construction: In Progress | :memo: Planned
 
