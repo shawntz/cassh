@@ -65,3 +65,57 @@ Then boom — new SSH cert, green dot, go commit code.
 > - **Use HTTPS** - OAuth tokens are transmitted
 > - **Restrict Entra app** - limit which users can authenticate
 > - Review access logs regularly
+
+---
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
+│  Menu Bar   │────▶│    cassh    │────▶│    Microsoft    │
+│    App      │     │   Server    │     │     Entra ID    │
+└─────────────┘     └─────────────┘     └─────────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  Internal   │
+                    │     CA      │
+                    └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────────┐
+                    │    GitHub       │
+                    │   Enterprise    │
+                    └─────────────────┘
+```
+
+---
+
+## Support the Project
+
+`cassh`` is built and maintained by [Shawn Schwartz](https://shawnschwartz.com), a PhD candidate in Psychology at Stanford where he studies attention and memory using neuroimaging — and teaches courses on research methods, data science, and computer science. By day, he builds software and hardware interfaces for cognitive neuroscience research. By night (and weekends), he tinkers with DevSecOps and builds tools like this one.
+
+I started `cassh` because managing SSH keys across a team is a nightmare, and I kept thinking "there has to be a better way." Then I spent 18 weeks working [@slackhq](https://github.com/slackhq), and there I learned that ephemeral certificates are that better way.
+
+If `cassh` saved you time or made your infrastructure more secure, consider supporting its development:
+
+- [GitHub Sponsors](https://github.com/sponsors/shawntz)
+- Star this repo and share it with others
+
+Every bit of support helps me justify the time spent on this free and open-source side project instead of my dissertation.
+
+---
+
+## Why Open Source?
+
+`cassh` is open source because security tooling should be auditable. You shouldn't have to trust a black box with your SSH authentication infrastructure.
+
+I've learned so much from reading other people's code, and I hope `cassh` can be useful to others — whether you're learning `Go`, building your own auth systems, or just curious how SSH certificates work under the hood.
+
+Contributions are welcome! Check out [CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to help out.
+
+---
+
+## License
+
+Apache 2.0 - See [LICENSE](LICENSE) for details. © Shawn Schwartz, 2025.
