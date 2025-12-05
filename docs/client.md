@@ -8,6 +8,16 @@ The menu bar app provides a visual indicator of certificate status and one-click
 
 ### Building the App
 
+**One-liner build script** (after configuring `cassh.policy.toml`):
+
+```bash
+./build-release.sh
+```
+
+This script validates your config, builds the binary, creates the app bundle, DMG, and PKG.
+
+**Or build step-by-step:**
+
 ```bash
 # Build the binary
 make menubar

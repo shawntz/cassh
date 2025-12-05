@@ -34,7 +34,10 @@ make dev-server  # Run server locally on :8080
 make build-oss           # OSS template (config editable)
 make build-enterprise    # Enterprise (locked policy)
 
-# macOS packaging
+# macOS packaging (one-liner after configuring cassh.policy.toml)
+./build-release.sh
+
+# Or step-by-step:
 make app-bundle   # Create cassh.app
 sudo make dmg     # Create DMG installer (requires sudo)
 make pkg          # Create PKG for MDM deployment
