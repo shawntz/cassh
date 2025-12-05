@@ -1,0 +1,9 @@
+# cassh Client Policy Configuration (Example)
+# This is ALL that's needed for the menu bar app / CLI
+# Copy to /Library/Application Support/cassh/cassh.policy.toml
+
+# Where your cassh server is running
+server_base_url = "https://cassh.yourcompany.com"
+
+# Certificate validity (informational - server enforces this)
+cert_validity_hours = 12

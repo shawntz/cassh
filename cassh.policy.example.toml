@@ -1,0 +1,29 @@
+# cassh Policy Configuration (Example)
+# Copy this to cassh.policy.toml and fill in your values
+#
+# SERVER DEPLOYMENT: Full config needed (OIDC, CA, etc.)
+# CLIENT DEPLOYMENT: Only server_base_url needed
+
+# Base URL where cassh-server is running
+server_base_url = "https://cassh.yourcompany.com"
+
+# Certificate validity in hours (default: 12)
+cert_validity_hours = 12
+
+# OIDC Configuration (SERVER ONLY - not needed for clients)
+# Using Microsoft Entra ID (Azure AD)
+[oidc]
+client_id = "your-entra-app-client-id"
+client_secret = "your-entra-client-secret"
+tenant = "your-tenant-id"  # or "common" for multi-tenant
+redirect_url = "https://cassh.yourcompany.com/auth/callback"
+
+# CA Configuration (SERVER ONLY)
+[ca]
+private_key_path = "/etc/cassh/ca_key"
+
+# GitHub Enterprise Configuration (SERVER ONLY)
+[github]
+enterprise_url = "https://github.yourcompany.com"
+# Optional: restrict to specific orgs
+# allowed_orgs = ["engineering", "platform"]
