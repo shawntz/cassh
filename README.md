@@ -1,9 +1,17 @@
 <div align="center">
+  <h1>cassh</h1>
+  
   <picture>
     <img src="docs/assets/logo.svg" alt="cassh logo" width="100" height="100">
   </picture>
-  <h1>cassh</h1>
+  
   <p><strong>Ephemeral SSH Certificates for GitHub Enterprise</strong></p>
+
+  <p>
+    <code>cassh</code> is an ephemeral SSH certificate system designed for GitHub Enterprise access.<br />
+    Developed for <a href="https://github.com/ghostehq" target="_blank">@ghostehq</a>. Inspired by internal tooling <a href="https://github.com/slackhq" target="_blank">@slackhq</a>.
+  </p>
+
   <p>
     <a href="https://github.com/shawntz/cassh/releases"><img src="https://img.shields.io/github/v/release/shawntz/cassh" alt="Release"></a>
     <a href="https://github.com/shawntz/cassh/blob/main/LICENSE"><img src="https://img.shields.io/github/license/shawntz/cassh" alt="License"></a>
@@ -13,8 +21,9 @@
 
 ---
 
-`cassh` is an ephemeral SSH certificate system designed for GitHub Enterprise access.
-Developed for [@ghostehq](https://github.com/ghostehq). Inspired by internal tooling [@slackhq](https://github.com/slackhq).
+
+
+
 
 **How it works:**
 
