@@ -1,31 +1,30 @@
 # 💰 `cassh` 💰
 
-### Ephemeral SSH Certificates, 12-Hour Access, and Unnecessary Cartoon-Level Drama.
+### Ephemeral SSH Certificates for GitHub Enterprise
 
 `cassh` is an ephemeral SSH certificate system designed for GitHub Enterprise access.
 Developed for [@ghostehq](https://github.com/ghostehq). Inspired by internal tooling [@slackhq](https://github.com/slackhq).
 
-#### 1. Authenticate with Microsoft Entra.  
-#### 2. Obtain a short-lived SSH cert.  
-#### 3. Admire Lumpy Space Princess or the DMV Sloth from Zootopia.  
-#### 4. Repeat every 12 hours because security and vibes.
+**How it works:**
 
-## Why I spent time building `cassh`
+1. Authenticate with Microsoft Entra (Azure AD)
+2. Obtain a short-lived SSH certificate (12 hours)
+3. Certificate auto-expires - no revocation needed
 
-Permanent SSH keys are a liability.
+## Why cassh?
 
-cassh issues **time-bound SSH certs** signed by an internal CA,
-valid only for GitHub Enterprise access, and **only for 12 hours**.
+Permanent SSH keys are a liability. If a laptop is lost, stolen, or compromised:
 
-Even if a laptop is lost, stolen, or emotionally compromised:
-- cert expires
-- access dies automatically
-- zero revocation events
+- **With permanent keys:** Manual revocation required, often missed
+- **With cassh:** Certificate expires automatically, zero action needed
 
 ## Features
 
-- **🔐 Short-lived SSH certificates**
-  Signed by your internal CA and registered in GitHub Enterprise.
+- **Short-lived SSH certificates** - Signed by your internal CA, valid for 12 hours
+- **Entra SSO Integration** - Sign in with your Microsoft identity
+- **macOS Menu Bar App** - Shows cert status (green = valid, red = expired)
+- **CLI for servers/CI** - Headless certificate generation
+- **Meme Landing Page** - LSP or Flash Slothmore from the DMV to greet you on login
 
 - **🪪 Entra SSO Integration**
   You sign in using your normal Microsoft identity provider.
@@ -56,7 +55,15 @@ Then boom — new SSH cert, green dot, go commit code.
 
 ---
 
+
+---
+
+## Security
+
 > [!CAUTION]
 > `cassh` is a privileged authentication system.
-> If you fork it, operate it, or remix it, you are fully responsible for any 
-> security outcomes, access grant failures, or certificate misuse.
+>
+> - **Protect your CA private key** - it can sign certificates for anyone
+> - **Use HTTPS** - OAuth tokens are transmitted
+> - **Restrict Entra app** - limit which users can authenticate
+> - Review access logs regularly
