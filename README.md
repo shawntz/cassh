@@ -26,8 +26,6 @@ Permanent SSH keys are a liability. If a laptop is lost, stolen, or compromised:
 - **CLI for servers/CI** - Headless certificate generation
 - **Meme Landing Page** - LSP or Flash Slothmore from the DMV to greet you on login
 
-- **🪪 Entra SSO Integration**
-  You sign in using your normal Microsoft identity provider.
 
 - **🟢 macOS Menu Bar Status Dot**
   - Green — your cert is valid, go forth and merge.
