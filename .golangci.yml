@@ -4,8 +4,6 @@ version: "2"
 
 run:
   timeout: 5m
-
-issues:
   # Exclude macOS-only menubar app (requires systray which needs GTK on Linux)
   exclude-dirs:
     - cmd/cassh-menubar
