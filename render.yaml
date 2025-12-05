@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: cassh
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: go build -o cassh-server ./cmd/cassh-server
+    startCommand: ./cassh-server
+    healthCheckPath: /health
+    envVars:
+      # Server URL (set after first deploy to get the .onrender.com URL)
+      - key: CASSH_SERVER_URL
+        sync: false
+      # OIDC / Entra ID settings
+      - key: CASSH_OIDC_CLIENT_ID
+        sync: false
+      - key: CASSH_OIDC_CLIENT_SECRET
+        sync: false
+      - key: CASSH_OIDC_TENANT
+        sync: false
+      - key: CASSH_OIDC_REDIRECT_URL
+        sync: false
+      # GitHub Enterprise
+      - key: CASSH_GITHUB_ENTERPRISE_URL
+        sync: false
+      # CA Private Key (paste full key content)
+      - key: CASSH_CA_PRIVATE_KEY
+        sync: false
