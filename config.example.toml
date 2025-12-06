@@ -1,0 +1,30 @@
+# cassh user configuration
+# Copy to ~/.config/cassh/config.toml to use (dotfiles-friendly location)
+# Or to ~/Library/Application Support/cassh/config.toml (macOS default)
+
+# UI preferences
+refresh_interval_seconds = 30
+notification_sound = true
+preferred_meme = "random"  # "lsp", "sloth", or "random"
+
+# Connections - add your GitHub accounts here
+# Each connection can be either "enterprise" (certificate-based) or "personal" (key-based)
+
+[[connections]]
+id = "enterprise-work"
+type = "enterprise"
+name = "Work GitHub"
+server_url = "https://cassh.yourcompany.com"
+github_host = "github.yourcompany.com"
+ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
+ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
+
+[[connections]]
+id = "personal-github"
+type = "personal"
+name = "Personal GitHub"
+github_host = "github.com"
+github_username = "yourusername"
+ssh_key_path = "~/.ssh/cassh_personal_id_ed25519"
+key_rotation_hours = 168  # Rotate key every 7 days (0 = no rotation)
+# key_created_at and github_key_id are managed automatically

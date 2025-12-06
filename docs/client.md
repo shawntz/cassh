@@ -108,7 +108,34 @@ For smaller deployments or testing:
 
 ### Client Configuration
 
-Create the policy file:
+cassh uses two config files:
+
+1. **User config** — your connections and preferences (see [Configuration Reference](configuration.md))
+2. **Policy config** — enterprise settings (bundled in PKG or created manually)
+
+#### User Config (Dotfiles-Friendly)
+
+Your connections are stored in a TOML config file. Place it in `~/.config/cassh/config.toml` to back up with your dotfiles:
+
+```bash
+mkdir -p ~/.config/cassh
+cat > ~/.config/cassh/config.toml << 'EOF'
+[[connections]]
+id = "enterprise-work"
+type = "enterprise"
+name = "Work GitHub"
+server_url = "https://cassh.yourcompany.com"
+github_host = "github.yourcompany.com"
+ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
+ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
+EOF
+```
+
+See the [Configuration Reference](configuration.md) for all options and examples.
+
+#### Policy Config (Enterprise)
+
+For enterprise deployments, create the policy file:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/cassh

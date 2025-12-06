@@ -94,7 +94,7 @@ type Connection struct {
 }
 
 // UserConfig contains user-editable prefs
-// Stored in ~/Library/Application Support/cassh/
+// Stored in ~/.config/cassh/config.toml (dotfiles) or ~/Library/Application Support/cassh/ (macOS)
 type UserConfig struct {
 	// UI prefs
 	RefreshIntervalSeconds int    `toml:"refresh_interval_seconds"`
@@ -107,6 +107,9 @@ type UserConfig struct {
 	// Legacy fields for backwards compatibility (deprecated, use Connections)
 	SSHKeyPath  string `toml:"ssh_key_path,omitempty"`
 	SSHCertPath string `toml:"ssh_cert_path,omitempty"`
+
+	// Runtime state (not persisted)
+	usingDotfiles bool `toml:"-"` // True if loaded from ~/.config/cassh/config.toml
 }
 
 // HasConnections returns true if the user has any connections configured
@@ -359,7 +362,27 @@ func LoadPolicy(policyPath string) (*PolicyConfig, error) {
 }
 
 // LoadUserConfig loads user prefs from the config dir
+// Checks dotfiles location (~/.config/cassh/config.toml) first, then platform-specific location
 func LoadUserConfig() (*UserConfig, error) {
+	// Check dotfiles location first (cross-platform, easy to backup)
+	dotfilesPath := DotfilesConfigPath()
+	if _, err := os.Stat(dotfilesPath); err == nil {
+		data, err := os.ReadFile(dotfilesPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read dotfiles config: %w", err)
+		}
+
+		config := DefaultUserConfig()
+		if err := toml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
+		}
+
+		// Mark that we're using dotfiles config
+		config.usingDotfiles = true
+		return &config, nil
+	}
+
+	// Fall back to platform-specific location
 	configPath, err := UserConfigPath()
 	if err != nil {
 		return nil, err
@@ -385,11 +408,10 @@ func LoadUserConfig() (*UserConfig, error) {
 }
 
 // SaveUserConfig persists user prefs
+// Always saves to dotfiles location (~/.config/cassh/config.toml) for easy backup
 func SaveUserConfig(config *UserConfig) error {
-	configPath, err := UserConfigPath()
-	if err != nil {
-		return err
-	}
+	// Always use dotfiles location for new saves - it's user-friendly and backup-friendly
+	configPath := DotfilesConfigPath()
 
 	// Ensure dir exists
 	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
@@ -405,6 +427,30 @@ func SaveUserConfig(config *UserConfig) error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
+	return nil
+}
+
+// SaveUserConfigToDotfiles saves config to the dotfiles location (~/.config/cassh/config.toml)
+// This can be used to migrate config to the dotfiles location
+func SaveUserConfigToDotfiles(config *UserConfig) error {
+	configPath := DotfilesConfigPath()
+
+	// Ensure dir exists
+	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
+		return fmt.Errorf("failed to create dotfiles config directory: %w", err)
+	}
+
+	data, err := toml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to serialize config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write dotfiles config: %w", err)
+	}
+
+	// Mark as using dotfiles for future saves
+	config.usingDotfiles = true
 	return nil
 }
 
@@ -431,6 +477,24 @@ func UserConfigPath() (string, error) {
 	}
 
 	return filepath.Join(configDir, "config.toml"), nil
+}
+
+// DotfilesConfigPath returns path to the dotfiles config location
+// This is always ~/.config/cassh/config.toml regardless of platform
+// Users can create this file to use as their primary config (easy to backup with dotfiles)
+func DotfilesConfigPath() string {
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, ".config", "cassh", "config.toml")
+}
+
+// UsingDotfiles returns true if the config was loaded from the dotfiles location
+func (u *UserConfig) UsingDotfiles() bool {
+	return u.usingDotfiles
+}
+
+// SetUsingDotfiles marks the config as using the dotfiles location
+func (u *UserConfig) SetUsingDotfiles(using bool) {
+	u.usingDotfiles = using
 }
 
 // PolicyPath returns expected policy file location based on build mode

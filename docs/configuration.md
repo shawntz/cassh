@@ -94,62 +94,187 @@ server_base_url = "https://cassh.yourcompany.com"
 
 ## User Config
 
-User preferences are stored in `~/Library/Application Support/cassh/config.toml` (macOS).
+The user config stores your connections (GitHub accounts) and UI preferences. This is the primary file you'll want to back up.
+
+### Config Locations
+
+cassh checks for user config in this order:
+
+1. **Dotfiles location** (recommended): `~/.config/cassh/config.toml`
+2. **Platform-specific** (fallback):
+   - macOS: `~/Library/Application Support/cassh/config.toml`
+   - Linux: `~/.config/cassh/config.toml`
+
+If the dotfiles location exists, it takes precedence. This makes it easy to back up your cassh configuration as part of your dotfiles.
+
+### Migrating to Dotfiles
+
+To migrate your existing config to the dotfiles location:
+
+```bash
+# Create the dotfiles directory
+mkdir -p ~/.config/cassh
+
+# Copy existing config (macOS)
+cp ~/Library/Application\ Support/cassh/config.toml ~/.config/cassh/config.toml
+
+# Or start fresh with the example
+curl -o ~/.config/cassh/config.toml \
+  https://raw.githubusercontent.com/shawntz/cassh/main/config.example.toml
+```
+
+Once the file exists at `~/.config/cassh/config.toml`, cassh will use it automatically.
+
+### Example Configuration
+
+Here's a complete example configuration with both enterprise and personal connections:
 
 ```toml
-# Refresh interval for status checks (seconds)
+# cassh user configuration
+# Location: ~/.config/cassh/config.toml (recommended for dotfiles backup)
+# Or: ~/Library/Application Support/cassh/config.toml (macOS default)
+
+# UI preferences
 refresh_interval_seconds = 30
-
-# Play sound on cert expiration warning
 notification_sound = true
+preferred_meme = "random"  # "lsp", "sloth", or "random"
 
-# Preferred meme character: "lsp", "sloth", or "random"
-preferred_meme = "random"
+# Connections - add your GitHub accounts here
+# Each connection can be either "enterprise" (certificate-based) or "personal" (key-based)
 
-# SSH key paths (auto-managed)
-ssh_key_path = "~/.ssh/cassh_id_ed25519"
-ssh_cert_path = "~/.ssh/cassh_id_ed25519-cert.pub"
+[[connections]]
+id = "enterprise-work"
+type = "enterprise"
+name = "Work GitHub"
+server_url = "https://cassh.yourcompany.com"
+github_host = "github.yourcompany.com"
+ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
+ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
+
+[[connections]]
+id = "personal-github"
+type = "personal"
+name = "Personal GitHub"
+github_host = "github.com"
+github_username = "yourusername"
+ssh_key_path = "~/.ssh/cassh_personal_id_ed25519"
+key_rotation_hours = 168  # Rotate key every 7 days (0 = no rotation)
+# key_created_at and github_key_id are managed automatically
+```
+
+### Connection Types
+
+#### Enterprise Connections
+
+Enterprise connections use SSH certificates signed by your organization's CA:
+
+```toml
+[[connections]]
+id = "enterprise-work"           # Unique identifier
+type = "enterprise"              # Must be "enterprise"
+name = "Work GitHub"             # Display name in menu bar
+server_url = "https://cassh.yourcompany.com"  # Your cassh server
+github_host = "github.yourcompany.com"        # GitHub Enterprise hostname
+ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
+ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
+```
+
+#### Personal Connections
+
+Personal connections use SSH keys uploaded to GitHub.com via the `gh` CLI:
+
+```toml
+[[connections]]
+id = "personal-github"           # Unique identifier
+type = "personal"                # Must be "personal"
+name = "Personal GitHub"         # Display name in menu bar
+github_host = "github.com"       # Always "github.com" for personal
+github_username = "yourusername" # Your GitHub username
+ssh_key_path = "~/.ssh/cassh_personal_id_ed25519"
+key_rotation_hours = 168         # Rotate every 7 days (0 = disable)
 ```
 
 ### Field Reference
 
+#### Global Settings
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `refresh_interval_seconds` | int | `30` | How often to check cert status |
+| `refresh_interval_seconds` | int | `30` | How often to check connection status |
 | `notification_sound` | bool | `true` | Play sound on warnings |
-| `preferred_meme` | string | `"random"` | Landing page character |
-| `ssh_key_path` | string | `~/.ssh/cassh_id_ed25519` | SSH private key location |
-| `ssh_cert_path` | string | `~/.ssh/cassh_id_ed25519-cert.pub` | Certificate location |
+| `preferred_meme` | string | `"random"` | Landing page character ("lsp", "sloth", "random") |
+
+#### Connection Fields (All Types)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier for the connection |
+| `type` | string | Yes | `"enterprise"` or `"personal"` |
+| `name` | string | Yes | Display name in menu bar |
+| `github_host` | string | Yes | GitHub hostname (e.g., `github.com` or `github.yourcompany.com`) |
+| `ssh_key_path` | string | Yes | Path to SSH private key |
+
+#### Enterprise-Only Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `server_url` | string | Yes | URL of your cassh server |
+| `ssh_cert_path` | string | Yes | Path to SSH certificate |
+
+#### Personal-Only Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `github_username` | string | Yes | Your GitHub username |
+| `key_rotation_hours` | int | No | Hours between key rotations (0 = disabled) |
+| `key_created_at` | int | Auto | Unix timestamp of key creation |
+| `github_key_id` | string | Auto | GitHub's ID for the uploaded key |
+
+### Rotation Policies
+
+For personal connections, you can configure automatic key rotation:
+
+| Policy | Hours | Use Case |
+|--------|-------|----------|
+| 4 hours | `4` | Shared/public computers |
+| 24 hours | `24` | Work laptop |
+| 7 days | `168` | Personal machine (recommended) |
+| 30 days | `720` | Low-risk environment |
+| 90 days | `2160` | Maximum allowed |
+| Disabled | `0` | No automatic rotation |
 
 ---
 
-## Config Locations
+## Config File Locations Summary
 
 ### macOS
 
 | Config | Location |
 |--------|----------|
+| User config (dotfiles) | `~/.config/cassh/config.toml` |
+| User config (fallback) | `~/Library/Application Support/cassh/config.toml` |
 | Policy (bundled) | `cassh.app/Contents/Resources/cassh.policy.toml` |
 | Policy (fallback) | `./cassh.policy.toml` |
-| User config | `~/Library/Application Support/cassh/config.toml` |
-| SSH key | `~/.ssh/cassh_id_ed25519` |
-| SSH cert | `~/.ssh/cassh_id_ed25519-cert.pub` |
+| SSH keys | `~/.ssh/cassh_*_id_ed25519` |
+| SSH certs | `~/.ssh/cassh_*_id_ed25519-cert.pub` |
 
 ### Linux
 
 | Config | Location |
 |--------|----------|
-| Policy | `./cassh.policy.toml` or `CASSH_POLICY_PATH` |
 | User config | `~/.config/cassh/config.toml` |
-| SSH key | `~/.ssh/cassh_id_ed25519` |
-| SSH cert | `~/.ssh/cassh_id_ed25519-cert.pub` |
+| Policy | `./cassh.policy.toml` or `CASSH_POLICY_PATH` |
+| SSH keys | `~/.ssh/cassh_*_id_ed25519` |
+| SSH certs | `~/.ssh/cassh_*_id_ed25519-cert.pub` |
 
 ---
 
 ## Config Precedence
 
 1. **Environment variables** (highest priority)
-2. **Policy file** (TOML)
-3. **Default values** (lowest priority)
+2. **Dotfiles config** (`~/.config/cassh/config.toml`)
+3. **Platform-specific config** (`~/Library/Application Support/cassh/config.toml`)
+4. **Policy file** (TOML)
+5. **Default values** (lowest priority)
 
 For security-critical settings (CA key, OIDC secrets), policy always wins over user config.

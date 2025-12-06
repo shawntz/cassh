@@ -86,6 +86,7 @@ Most developers juggle multiple GitHub accounts — work and personal, or multip
 | Key/cert rotation | ✓ (configurable) | ✓ (12h default) |
 | Multi-account support | ✓ | ✓ |
 | Revoke & renew from menu bar | ✓ | ✓ |
+| [Dotfiles-friendly config](configuration.md) | ✓ | ✓ |
 | Microsoft Entra SSO | — | ✓ |
 | CA-signed certificates | — | ✓ |
 | MDM deployment (PKG) | — | ✓ |

@@ -97,6 +97,7 @@ Most developers juggle multiple GitHub accounts — work and personal, or multip
 | Key/cert rotation | ✓ (configurable) | ✓ (12h default) |
 | Multi-account support | ✓ | ✓ |
 | Revoke & renew from menu bar | ✓ | ✓ |
+| Dotfiles-friendly config | ✓ | ✓ |
 | Microsoft Entra SSO | — | ✓ |
 | CA-signed certificates | — | ✓ |
 | MDM deployment (PKG) | — | ✓ |
@@ -161,6 +162,36 @@ See the **[Full Documentation](https://shawnschwartz.com/cassh)** for:
 - [Server Setup](https://shawnschwartz.com/cassh/server-setup/) — CA keys, Entra app configuration
 - [Deployment](https://shawnschwartz.com/cassh/deployment/) — Fly.io, Render, Railway, VPS
 - [Client Distribution](https://shawnschwartz.com/cassh/client/) — MDM deployment with PKG
+
+---
+
+## Configuration
+
+cassh stores your connections in a simple TOML config file. The config is **dotfiles-friendly** — store it in `~/.config/cassh/config.toml` to back up with your dotfiles.
+
+```toml
+# ~/.config/cassh/config.toml
+
+[[connections]]
+id = "personal-github"
+type = "personal"
+name = "Personal GitHub"
+github_host = "github.com"
+github_username = "yourusername"
+ssh_key_path = "~/.ssh/cassh_personal_id_ed25519"
+key_rotation_hours = 168  # Rotate every 7 days
+
+[[connections]]
+id = "enterprise-work"
+type = "enterprise"
+name = "Work GitHub"
+server_url = "https://cassh.yourcompany.com"
+github_host = "github.yourcompany.com"
+ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
+ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
+```
+
+See the **[Configuration Reference](https://shawnschwartz.com/cassh/configuration/)** for all options, or check out [`config.example.toml`](config.example.toml) for a complete example.
 
 ---
 

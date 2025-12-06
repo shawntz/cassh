@@ -94,7 +94,18 @@ packaging/macos/      # macOS distribution files
 | Config | Location | Editable | Contains |
 |--------|----------|----------|----------|
 | Policy | `cassh.policy.toml` (bundled in app) | No | CA key, cert validity, OIDC settings, GHE URL |
-| User | `~/Library/Application Support/cassh/config.toml` | Yes | UI prefs, refresh interval |
+| User | `~/.config/cassh/config.toml` (dotfiles) | Yes | Connections, UI prefs, refresh interval |
+| User (fallback) | `~/Library/Application Support/cassh/config.toml` | Yes | Same as above (platform-specific) |
+
+**Dotfiles support**: The app checks `~/.config/cassh/config.toml` first. If it exists, it's used as the primary config location. This makes it easy to back up your connections as part of your dotfiles. To migrate:
+
+```bash
+# Create dotfiles config directory
+mkdir -p ~/.config/cassh
+
+# Copy existing config (if any)
+cp ~/Library/Application\ Support/cassh/config.toml ~/.config/cassh/config.toml
+```
 
 ## Key Files
 
