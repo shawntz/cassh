@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -79,6 +80,9 @@ func main() {
 
 	// Initialize native notifications (request permission)
 	initNotifications()
+
+	// Register URL scheme handler for cassh:// URLs
+	registerURLSchemeHandler()
 
 	// Register as login item (triggers system prompt on first run)
 	// Uses SMAppService on macOS 13+, falls back to LaunchAgent on older versions
@@ -421,9 +425,41 @@ func updateConnectionStatus(connIdx int) {
 			return
 		}
 
-		// Key exists - show as active
+		// Key exists - show as active with time until rotation
 		status.Valid = true
-		statusText := fmt.Sprintf("🟢 %s (@%s)", conn.Name, conn.GitHubUsername)
+
+		var statusText string
+		if conn.KeyRotationHours > 0 && conn.KeyCreatedAt > 0 {
+			// Calculate time until key rotation
+			rotationDuration := time.Duration(conn.KeyRotationHours) * time.Hour
+			keyAge := time.Since(time.Unix(conn.KeyCreatedAt, 0))
+			timeUntilRotation := rotationDuration - keyAge
+
+			status.TimeLeft = timeUntilRotation
+			status.ValidBefore = time.Unix(conn.KeyCreatedAt, 0).Add(rotationDuration)
+
+			if timeUntilRotation <= 0 {
+				// Key rotation is due
+				statusText = fmt.Sprintf("🟡 %s (@%s) - rotation due", conn.Name, conn.GitHubUsername)
+			} else {
+				hours := int(timeUntilRotation.Hours())
+				mins := int(timeUntilRotation.Minutes()) % 60
+
+				if hours >= 24 {
+					days := hours / 24
+					hours = hours % 24
+					statusText = fmt.Sprintf("🟢 %s (@%s) %dd %dh", conn.Name, conn.GitHubUsername, days, hours)
+				} else if hours > 0 {
+					statusText = fmt.Sprintf("🟢 %s (@%s) %dh %dm", conn.Name, conn.GitHubUsername, hours, mins)
+				} else {
+					statusText = fmt.Sprintf("🟡 %s (@%s) %dm", conn.Name, conn.GitHubUsername, mins)
+				}
+			}
+		} else {
+			// No rotation policy or unknown creation time
+			statusText = fmt.Sprintf("🟢 %s (@%s)", conn.Name, conn.GitHubUsername)
+		}
+
 		if connIdx < len(menuConnections) {
 			menuConnections[connIdx].SetTitle(statusText)
 		}
@@ -1759,8 +1795,8 @@ func checkAndRotateExpiredKeys() {
 
 // scheduleRestart restarts the app to rebuild the menu after adding connections
 func scheduleRestart() {
-	// Wait for the HTTP response to be sent and WebView to close
-	time.Sleep(2 * time.Second)
+	// Wait for the HTTP response to be sent
+	time.Sleep(1 * time.Second)
 
 	// Close the WebView window
 	closeNativeWebView()
@@ -1769,6 +1805,7 @@ func scheduleRestart() {
 	execPath, err := os.Executable()
 	if err != nil {
 		log.Printf("Failed to get executable path: %v", err)
+		sendNotification("cassh", "Please quit and reopen cassh to see your new connection", false)
 		return
 	}
 
@@ -1778,22 +1815,39 @@ func scheduleRestart() {
 	// execPath is like /Applications/cassh.app/Contents/MacOS/cassh
 	// We need to find the .app bundle path
 	appPath := execPath
+	isAppBundle := false
 	if idx := strings.Index(execPath, ".app/"); idx != -1 {
 		appPath = execPath[:idx+4] // Include ".app"
+		isAppBundle = true
 	}
 
-	// Use 'open' to relaunch the app bundle (works correctly with macOS)
-	cmd := exec.Command("open", "-n", "-a", appPath)
+	// Write a temporary script that will relaunch the app
+	// Using a script file ensures it survives parent process exit
+	scriptContent := fmt.Sprintf("#!/bin/bash\nsleep 2\nopen -a '%s'\nrm -f \"$0\"\n", appPath)
+	if !isAppBundle {
+		scriptContent = fmt.Sprintf("#!/bin/bash\nsleep 2\n'%s' &\nrm -f \"$0\"\n", execPath)
+	}
+
+	scriptPath := filepath.Join(os.TempDir(), fmt.Sprintf("cassh-restart-%d.sh", time.Now().UnixNano()))
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		log.Printf("Failed to write restart script: %v", err)
+		sendNotification("cassh", "Please quit and reopen cassh to see your new connection", false)
+		return
+	}
+
+	// Launch the script with nohup so it survives our exit
+	cmd := exec.Command("nohup", scriptPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true, // Create new process group so it's not killed with parent
+	}
 	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to relaunch app: %v", err)
-		// Fallback to direct execution
-		cmd = exec.Command(execPath)
-		if err := cmd.Start(); err != nil {
-			log.Printf("Fallback restart also failed: %v", err)
-		}
+		log.Printf("Failed to launch restart script: %v", err)
+		os.Remove(scriptPath)
+		sendNotification("cassh", "Please quit and reopen cassh to see your new connection", false)
+		return
 	}
 
-	// Quit current instance
+	// Now quit - the script will relaunch after we're gone
 	systray.Quit()
 }
 

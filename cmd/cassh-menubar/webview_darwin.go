@@ -13,7 +13,11 @@ package main
 static NSWindow* setupWindow = nil;
 static WKWebView* webView = nil;
 
-// Navigation delegate to handle page loads
+// Forward declaration for Go callback - defined via //export in Go code
+// Note: CGO generates declaration without 'const', so we match that
+void handleCasshURL(char* url);
+
+// Navigation delegate to handle page loads and custom URL schemes
 @interface WebViewDelegate : NSObject <WKNavigationDelegate>
 @end
 
@@ -24,6 +28,23 @@ static WKWebView* webView = nil;
 
 - (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {
     NSLog(@"WebView navigation failed: %@", error.localizedDescription);
+}
+
+// Intercept navigation requests to handle cassh:// URLs
+- (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
+    NSURL *url = navigationAction.request.URL;
+
+    // Handle cassh:// URL scheme
+    if ([[url scheme] isEqualToString:@"cassh"]) {
+        NSLog(@"WebView intercepted cassh:// URL: %@", url.absoluteString);
+        // Call Go handler (cast away const since Go doesn't use const)
+        handleCasshURL((char*)[url.absoluteString UTF8String]);
+        decisionHandler(WKNavigationActionPolicyCancel);
+        return;
+    }
+
+    // Allow all other URLs
+    decisionHandler(WKNavigationActionPolicyAllow);
 }
 @end
 

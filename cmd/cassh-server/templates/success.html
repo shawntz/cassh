@@ -363,10 +363,32 @@
             const btn = document.querySelector('.auto-install-btn');
             const originalHTML = btn.innerHTML;
 
-            btn.innerHTML = 'Installing...';
+            btn.innerHTML = 'Opening cassh.app...';
             btn.disabled = true;
 
-            // Try localhost first, then 127.0.0.1 as fallback
+            // Check if we're on HTTPS - if so, use URL scheme (avoids mixed content)
+            const isSecure = window.location.protocol === 'https:';
+
+            if (isSecure) {
+                // Use cassh:// URL scheme to pass cert to app
+                // Base64 encode the cert for URL safety
+                const certB64 = btoa(cert).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                const url = `cassh://install-cert?cert=${certB64}`;
+
+                // Open the URL scheme - this will launch cassh.app
+                window.location.href = url;
+
+                // Show success state (app will handle the rest)
+                setTimeout(() => {
+                    btn.innerHTML = 'Opened cassh.app ✓';
+                    btn.style.background = 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)';
+                }, 500);
+                return;
+            }
+
+            // Fallback for HTTP (local development): use fetch
+            btn.innerHTML = 'Installing...';
+
             const endpoints = [
                 'http://localhost:52849/install-cert',
                 'http://127.0.0.1:52849/install-cert'
@@ -394,13 +416,11 @@
                 }
             }
 
-            // Determine error message based on error type
+            // Error handling
             let errorMsg = 'cassh.app not running';
             if (lastError) {
                 console.error('Auto-install failed:', lastError);
-                if (lastError.message && lastError.message.includes('Mixed Content')) {
-                    errorMsg = 'Browser blocked (mixed content)';
-                } else if (lastError.message && lastError.message.includes('Invalid')) {
+                if (lastError.message && lastError.message.includes('Invalid')) {
                     errorMsg = 'Invalid certificate';
                 }
             }
