@@ -251,14 +251,18 @@ func (s *Server) handleDevAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate cert
+	// Generate cert with GitHub login extension
+	// Extract GitHub hostname from URL (e.g., "https://github.mycompany.com" -> "github.mycompany.com")
+	githubHost := config.ExtractHostFromURL(s.config.GitHubEnterpriseURL)
 	keyID := fmt.Sprintf("cassh:dev:%s:%d", userInfo.Email, time.Now().Unix())
-	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, principal)
+	cert, err := s.ca.SignPublicKeyForGitHub(sshPubKey, keyID, principal, githubHost)
 	if err != nil {
 		log.Printf("Cert signing error: %v", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("🔓 DEV AUTH: Signed cert for principal=%s, login@%s=%s", principal, githubHost, principal)
 
 	certData := ca.MarshalCertificate(cert)
 	certInfo := ca.GetCertInfo(cert)
@@ -314,14 +318,18 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate cert
+	// Generate cert with GitHub login extension
+	// Extract GitHub hostname from URL (e.g., "https://github.mycompany.com" -> "github.mycompany.com")
+	githubHost := config.ExtractHostFromURL(s.config.GitHubEnterpriseURL)
 	keyID := fmt.Sprintf("cassh:%s:%d", userInfo.Email, time.Now().Unix())
-	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, principal)
+	cert, err := s.ca.SignPublicKeyForGitHub(sshPubKey, keyID, principal, githubHost)
 	if err != nil {
 		log.Printf("Cert signing error: %v", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("Signed cert for %s: principal=%s, login@%s=%s", userInfo.Email, principal, githubHost, principal)
 
 	certData := ca.MarshalCertificate(cert)
 	certInfo := ca.GetCertInfo(cert)
