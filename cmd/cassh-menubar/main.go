@@ -229,12 +229,20 @@ func buildConnectionMenu() {
 		}
 		actionItem := systray.AddMenuItem(fmt.Sprintf("  %s", actionText), fmt.Sprintf("Generate/renew for %s", conn.Name))
 
+		// Add revoke item for this connection
+		revokeItem := systray.AddMenuItem("  Revoke Certificate", fmt.Sprintf("Revoke certificate for %s", conn.Name))
+
 		// Capture connection for closure
 		connID := conn.ID
 		connIdx := i
 		go func() {
 			for range actionItem.ClickedCh {
 				handleConnectionAction(connID)
+			}
+		}()
+		go func() {
+			for range revokeItem.ClickedCh {
+				revokeConnectionCert(connID, connIdx)
 			}
 		}()
 
@@ -303,6 +311,42 @@ func handleConnectionAction(connID string) {
 	} else {
 		refreshKeyForConnection(conn)
 	}
+}
+
+// revokeConnectionCert revokes the certificate for a connection
+func revokeConnectionCert(connID string, connIdx int) {
+	conn := cfg.User.GetConnection(connID)
+	if conn == nil {
+		log.Printf("Connection not found: %s", connID)
+		return
+	}
+
+	log.Printf("Revoking certificate for connection: %s", conn.Name)
+
+	// Remove key from ssh-agent first
+	if conn.SSHKeyPath != "" {
+		if err := exec.Command("ssh-add", "-d", conn.SSHKeyPath).Run(); err != nil {
+			log.Printf("Note: Could not remove key from ssh-agent: %v", err)
+		} else {
+			log.Printf("Removed key from ssh-agent: %s", conn.SSHKeyPath)
+		}
+	}
+
+	// Remove certificate file
+	if conn.Type == config.ConnectionTypeEnterprise && conn.SSHCertPath != "" {
+		if err := os.Remove(conn.SSHCertPath); err != nil {
+			if !os.IsNotExist(err) {
+				log.Printf("Error removing certificate: %v", err)
+			}
+		} else {
+			log.Printf("Removed certificate: %s", conn.SSHCertPath)
+		}
+	}
+
+	// Update the menu status
+	updateConnectionStatus(connIdx)
+
+	log.Printf("Certificate revoked for connection: %s", conn.Name)
 }
 
 // generateCertForConnection opens WebView to generate cert for enterprise connection
