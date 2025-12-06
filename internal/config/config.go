@@ -51,6 +51,48 @@ func (p *PolicyConfig) IsDevMode() bool {
 	return p.DevMode || p.OIDCTenantID == ""
 }
 
+// ConnectionType identifies the type of GitHub connection
+type ConnectionType string
+
+const (
+	ConnectionTypeEnterprise ConnectionType = "enterprise"
+	ConnectionTypePersonal   ConnectionType = "personal"
+)
+
+// Connection represents a single GitHub connection (enterprise or personal)
+type Connection struct {
+	// Unique identifier for this connection
+	ID string `toml:"id"`
+
+	// Type of connection: "enterprise" or "personal"
+	Type ConnectionType `toml:"type"`
+
+	// Display name (e.g., "GitHub Enterprise" or "GitHub.com")
+	Name string `toml:"name"`
+
+	// For enterprise: the cassh server URL
+	ServerURL string `toml:"server_url,omitempty"`
+
+	// For enterprise: the GitHub Enterprise hostname (e.g., "github.yourcompany.com")
+	// For personal: "github.com"
+	GitHubHost string `toml:"github_host"`
+
+	// For personal: GitHub username (from gh auth)
+	GitHubUsername string `toml:"github_username,omitempty"`
+
+	// SSH key paths for this connection
+	SSHKeyPath  string `toml:"ssh_key_path"`
+	SSHCertPath string `toml:"ssh_cert_path,omitempty"` // Only for enterprise
+
+	// For personal: key rotation settings
+	KeyRotationHours int    `toml:"key_rotation_hours,omitempty"` // 0 = no rotation
+	KeyCreatedAt     int64  `toml:"key_created_at,omitempty"`     // Unix timestamp
+	GitHubKeyID      string `toml:"github_key_id,omitempty"`      // GitHub SSH key ID for deletion
+
+	// Connection status (not persisted, runtime only)
+	IsActive bool `toml:"-"`
+}
+
 // UserConfig contains user-editable prefs
 // Stored in ~/Library/Application Support/cassh/
 type UserConfig struct {
@@ -59,9 +101,43 @@ type UserConfig struct {
 	NotificationSound      bool   `toml:"notification_sound"`
 	PreferredMeme          string `toml:"preferred_meme"` // "lsp", "sloth", or "random"
 
-	// Local paths (auto-managed)
-	SSHKeyPath  string `toml:"ssh_key_path"`
-	SSHCertPath string `toml:"ssh_cert_path"`
+	// Connections (enterprise and/or personal GitHub accounts)
+	Connections []Connection `toml:"connections"`
+
+	// Legacy fields for backwards compatibility (deprecated, use Connections)
+	SSHKeyPath  string `toml:"ssh_key_path,omitempty"`
+	SSHCertPath string `toml:"ssh_cert_path,omitempty"`
+}
+
+// HasConnections returns true if the user has any connections configured
+func (u *UserConfig) HasConnections() bool {
+	return len(u.Connections) > 0
+}
+
+// GetConnection returns a connection by ID
+func (u *UserConfig) GetConnection(id string) *Connection {
+	for i := range u.Connections {
+		if u.Connections[i].ID == id {
+			return &u.Connections[i]
+		}
+	}
+	return nil
+}
+
+// AddConnection adds a new connection
+func (u *UserConfig) AddConnection(conn Connection) {
+	u.Connections = append(u.Connections, conn)
+}
+
+// RemoveConnection removes a connection by ID
+func (u *UserConfig) RemoveConnection(id string) bool {
+	for i, conn := range u.Connections {
+		if conn.ID == id {
+			u.Connections = append(u.Connections[:i], u.Connections[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // MergedConfig is the final runtime config
@@ -90,6 +166,10 @@ type ServerConfig struct {
 	// GitHub settings
 	GitHubEnterpriseURL string   `toml:"github_enterprise_url"`
 	GitHubAllowedOrgs   []string `toml:"github_allowed_orgs"`
+					PrincipalSource string   `toml:"principal_source"`
+	// PrincipalSource determines how to derive the SSH certificate principal from OIDC claims
+	// Options: "email_prefix" (default), "email", "username", or a custom claim name
+	GitHubPrincipalSource string `toml:"github_principal_source"`
 
 	// Devel mode
 	DevMode bool `toml:"dev_mode"`
@@ -108,6 +188,7 @@ type ServerConfig struct {
 //   - CASSH_CA_PRIVATE_KEY (raw key content)
 //   - CASSH_CA_PRIVATE_KEY_PATH (path to key file)
 //   - CASSH_GITHUB_ENTERPRISE_URL
+//   - CASSH_GITHUB_PRINCIPAL_SOURCE (email_prefix, email, username)
 //   - CASSH_DEV_MODE
 func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 	config := &ServerConfig{
@@ -134,6 +215,7 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 				GitHub struct {
 					EnterpriseURL string   `toml:"enterprise_url"`
 					AllowedOrgs   []string `toml:"allowed_orgs"`
+					PrincipalSource string   `toml:"principal_source"`
 				} `toml:"github"`
 			}
 
@@ -153,6 +235,7 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 			config.CAPrivateKeyPath = fileConfig.CA.PrivateKeyPath
 			config.GitHubEnterpriseURL = fileConfig.GitHub.EnterpriseURL
 			config.GitHubAllowedOrgs = fileConfig.GitHub.AllowedOrgs
+			config.GitHubPrincipalSource = fileConfig.GitHub.PrincipalSource
 		}
 	}
 
@@ -182,6 +265,9 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 	}
 	if v := os.Getenv("CASSH_GITHUB_ENTERPRISE_URL"); v != "" {
 		config.GitHubEnterpriseURL = v
+	}
+	if v := os.Getenv("CASSH_GITHUB_PRINCIPAL_SOURCE"); v != "" {
+		config.GitHubPrincipalSource = v
 	}
 	if v := os.Getenv("CASSH_DEV_MODE"); v == "true" || v == "1" {
 		config.DevMode = true
@@ -248,9 +334,25 @@ func LoadPolicy(policyPath string) (*PolicyConfig, error) {
 		return nil, fmt.Errorf("failed to read policy file: %w", err)
 	}
 
-	var policy PolicyConfig
-	if err := toml.Unmarshal(data, &policy); err != nil {
+	// Use intermediate struct to handle nested sections
+	var fileConfig struct {
+		PolicyConfig
+		GitHub struct {
+			EnterpriseURL string   `toml:"enterprise_url"`
+			AllowedOrgs   []string `toml:"allowed_orgs"`
+					PrincipalSource string   `toml:"principal_source"`
+		} `toml:"github"`
+	}
+
+	if err := toml.Unmarshal(data, &fileConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse policy file: %w", err)
+	}
+
+	policy := fileConfig.PolicyConfig
+
+	// Map nested [github] section to flat fields
+	if fileConfig.GitHub.EnterpriseURL != "" {
+		policy.GitHubEnterpriseURL = fileConfig.GitHub.EnterpriseURL
 	}
 
 	return &policy, nil
@@ -372,4 +474,67 @@ func MergeConfigs(policy *PolicyConfig, user *UserConfig) *MergedConfig {
 		Policy: *policy,
 		User:   *user,
 	}
+}
+
+// NeedsSetup returns true if the app needs to show the setup wizard
+// This happens when:
+// - No connections are configured in user config
+// - AND the bundled policy doesn't have a valid server URL (OSS mode)
+func NeedsSetup(policy *PolicyConfig, user *UserConfig) bool {
+	// If user has connections configured, no setup needed
+	if user.HasConnections() {
+		return false
+	}
+
+	// If policy has a valid server URL (enterprise mode), no setup needed
+	// The policy server URL acts as the default enterprise connection
+	if policy != nil && policy.ServerBaseURL != "" {
+		return false
+	}
+
+	// No connections and no enterprise policy = needs setup
+	return true
+}
+
+// IsEnterpriseMode returns true if the app is running in enterprise mode
+// (has a bundled policy with server URL)
+func IsEnterpriseMode(policy *PolicyConfig) bool {
+	return policy != nil && policy.ServerBaseURL != ""
+}
+
+// CreateEnterpriseConnectionFromPolicy creates a Connection from the bundled policy
+// This is used for enterprise deployments where IT bundles the config
+func CreateEnterpriseConnectionFromPolicy(policy *PolicyConfig) *Connection {
+	if policy == nil || policy.ServerBaseURL == "" {
+		return nil
+	}
+
+	homeDir, _ := os.UserHomeDir()
+
+	return &Connection{
+		ID:          "enterprise-default",
+		Type:        ConnectionTypeEnterprise,
+		Name:        "GitHub Enterprise",
+		ServerURL:   policy.ServerBaseURL,
+		GitHubHost:  ExtractHostFromURL(policy.GitHubEnterpriseURL),
+		SSHKeyPath:  filepath.Join(homeDir, ".ssh", "cassh_id_ed25519"),
+		SSHCertPath: filepath.Join(homeDir, ".ssh", "cassh_id_ed25519-cert.pub"),
+	}
+}
+
+// ExtractHostFromURL extracts the hostname from a URL
+func ExtractHostFromURL(urlStr string) string {
+	if urlStr == "" {
+		return ""
+	}
+	// Simple extraction - remove protocol
+	host := urlStr
+	if idx := strings.Index(host, "://"); idx != -1 {
+		host = host[idx+3:]
+	}
+	// Remove path
+	if idx := strings.Index(host, "/"); idx != -1 {
+		host = host[:idx]
+	}
+	return host
 }
