@@ -2,16 +2,54 @@
 
 This guide will walk you through setting up `cassh` from scratch.
 
+## Choose Your Use Case
+
+`cassh` supports two modes of operation:
+
+| Mode | For | Authentication | Server Required |
+|------|-----|----------------|-----------------|
+| **GitHub Enterprise** | Organizations | SSH Certificates (CA-signed) | Yes |
+| **GitHub.com Personal** | Individuals | SSH Keys (via `gh` CLI) | No |
+
+You can use both modes simultaneously - for example, enterprise access for work and personal access for side projects.
+
 ## Prerequisites
 
-Before you begin, ensure you have:
+### For GitHub.com Personal Use
 
-- **Go 1.21+** - [Download Go](https://golang.org/dl/)
+- **macOS** - Menu bar app is macOS-only (for now)
+- **GitHub CLI (`gh`)** - [Install with Homebrew](https://cli.github.com/): `brew install gh`
+- **Authenticated with `gh`** - Run `gh auth login` before using cassh
+
+That's it! Download the PKG from [Releases](https://github.com/shawntz/cassh/releases) or install via Homebrew:
+
+```bash
+brew install --cask cassh
+```
+
+### For GitHub Enterprise Use
+
+- **Go 1.21+** - [Download Go](https://golang.org/dl/) (for building)
 - **Microsoft Entra ID tenant** - For SSO authentication
 - **GitHub Enterprise instance** - Where your repos live
-- **A server** - To run cassh (see [Deployment](deployment.md))
+- **A server** - To run cassh-server (see [Deployment](deployment.md))
 
-## Quick Start (Development)
+## Quick Start: Personal GitHub.com
+
+1. **Install** via Homebrew or download PKG from [Releases](https://github.com/shawntz/cassh/releases):
+   ```bash
+   brew install --cask cassh
+   ```
+2. **Launch** cassh - the setup wizard opens automatically
+3. **Add Personal Account** - Enter your GitHub username, choose rotation policy
+4. **Done!** - cassh generates a key and uploads it via `gh` CLI
+
+
+Your SSH config is automatically updated. Just `git clone` and go!
+
+> **Tip:** For shared or work computers, use a shorter rotation policy (4-24 hours). For personal machines, 7-90 days is usually fine.
+
+## Quick Start: Development (Enterprise)
 
 For local development and testing:
 
@@ -32,7 +70,7 @@ make dev-server
 
 The server starts at `http://localhost:8080` with mock authentication enabled.
 
-## Quick Start (Production)
+## Quick Start: Production (Enterprise)
 
 For production deployment:
 
@@ -75,17 +113,20 @@ make cli         # cassh CLI
 make test
 
 # Build macOS app bundle
-make app-bundle
+make app-bundle          # OSS build (setup wizard)
+make app-bundle-enterprise  # Enterprise build (locked config)
 
-# Create DMG installer (requires sudo)
-sudo make dmg
-
-# Create PKG for MDM
+# Create PKG installer
 make pkg
 ```
 
 ## Next Steps
 
+### For Personal Use
+- Download and install - you're ready to go!
+- See [Configuration Reference](configuration.md) for customization options
+
+### For Enterprise Use
 1. [Server Setup](server-setup.md) - Configure CA and Entra
 2. [Deployment](deployment.md) - Deploy to production
 3. [Client Distribution](client.md) - Distribute to users
