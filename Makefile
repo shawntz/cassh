@@ -19,9 +19,14 @@ APPLE_DEVELOPER_ID ?=
 APPLE_TEAM_ID ?=
 APPLE_KEYCHAIN_PROFILE ?= cassh-notarize
 
+# Policy file to bundle (OSS uses example, enterprise uses real config)
+# Override with: make app-bundle POLICY_FILE=cassh.policy.toml
+POLICY_FILE ?= cassh.policy.example.toml
+
 .PHONY: all clean deps build build-oss build-enterprise \
         server menubar cli \
-        app-bundle dmg dmg-only pkg pkg-only \
+        app-bundle app-bundle-oss app-bundle-enterprise \
+        dmg dmg-only pkg pkg-only \
         sign notarize \
         test lint
 
@@ -68,14 +73,15 @@ build-oss: build
 build-enterprise: build
 	@echo "Building enterprise distribution..."
 	@mkdir -p $(DIST_DIR)/enterprise
-	$(MAKE) app-bundle
+	$(MAKE) app-bundle-enterprise
 	@echo "Enterprise build complete: $(DIST_DIR)/enterprise/"
 
 # =============================================================================
 # macOS App Bundle
 # =============================================================================
+# Default app-bundle uses POLICY_FILE variable (defaults to example for OSS)
 app-bundle: menubar
-	@echo "Creating macOS app bundle..."
+	@echo "Creating macOS app bundle (policy: $(POLICY_FILE))..."
 	@rm -rf $(APP_BUNDLE)
 	@mkdir -p $(APP_BUNDLE)/Contents/MacOS
 	@mkdir -p $(APP_BUNDLE)/Contents/Resources
@@ -83,8 +89,8 @@ app-bundle: menubar
 	# Copy binary
 	@cp $(BUILD_DIR)/$(BINARY_MENUBAR) $(APP_BUNDLE)/Contents/MacOS/cassh
 
-	# Copy policy (immutable in enterprise)
-	@cp cassh.policy.toml $(APP_BUNDLE)/Contents/Resources/cassh.policy.toml
+	# Copy policy file
+	@cp $(POLICY_FILE) $(APP_BUNDLE)/Contents/Resources/cassh.policy.toml
 
 	# Create Info.plist
 	@cat packaging/macos/Info.plist.template | \
@@ -96,10 +102,23 @@ app-bundle: menubar
 		cp packaging/macos/cassh.icns $(APP_BUNDLE)/Contents/Resources/; \
 	fi
 
-	# Make policy immutable (enterprise mode)
+	# Copy LaunchAgent plist for PKG postinstall
+	@cp packaging/macos/com.shawnschwartz.cassh.plist $(APP_BUNDLE)/Contents/Resources/
+
+	# Make policy read-only
 	@chmod 444 $(APP_BUNDLE)/Contents/Resources/cassh.policy.toml
 
 	@echo "App bundle created: $(APP_BUNDLE)"
+
+# OSS app bundle (blank policy, shows setup wizard on first run)
+app-bundle-oss: POLICY_FILE = cassh.policy.example.toml
+app-bundle-oss: app-bundle
+	@echo "OSS app bundle created (will show setup wizard)"
+
+# Enterprise app bundle (requires cassh.policy.toml with real config)
+app-bundle-enterprise: POLICY_FILE = cassh.policy.toml
+app-bundle-enterprise: app-bundle
+	@echo "Enterprise app bundle created (locked policy)"
 
 # =============================================================================
 # DMG Creation (requires sudo for disk image mounting)
@@ -111,23 +130,25 @@ dmg-only:
 	@echo "Creating DMG installer..."
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/cassh-$(VERSION).dmg
+	# Ensure any previously mounted volume with same name is detached
+	@hdiutil detach "/Volumes/cassh Installer" >/dev/null 2>&1 || true
 
-	# Create DMG with create-dmg (brew install create-dmg)
+	# Create DMG (background disabled due to macOS Tahoe compatibility issues)
 	@if command -v create-dmg &> /dev/null; then \
 		create-dmg \
 			--volname "cassh Installer" \
 			--volicon "packaging/macos/cassh.icns" \
-			--window-pos 200 120 \
+			--window-pos 400 200 \
 			--window-size 600 400 \
-			--icon-size 100 \
-			--icon "cassh.app" 150 185 \
+			--icon-size 128 \
+			--icon "cassh.app" 150 200 \
 			--hide-extension "cassh.app" \
-			--app-drop-link 450 185 \
+			--app-drop-link 450 200 \
 			--no-internet-enable \
 			"$(DIST_DIR)/cassh-$(VERSION).dmg" \
 			"$(APP_BUNDLE)"; \
 	else \
-		hdiutil create -volname "cassh" -srcfolder $(APP_BUNDLE) \
+		hdiutil create -volname "cassh Installer" -srcfolder $(APP_BUNDLE) \
 			-ov -format UDZO "$(DIST_DIR)/cassh-$(VERSION).dmg"; \
 	fi
 
