@@ -24,6 +24,7 @@ You can use both modes simultaneously - for example, enterprise access for work 
 That's it! Download the PKG from [Releases](https://github.com/shawntz/cassh/releases) or install via Homebrew:
 
 ```bash
+brew tap shawntz/cassh
 brew install --cask cassh
 ```
 
@@ -38,6 +39,7 @@ brew install --cask cassh
 
 1. **Install** via Homebrew or download PKG from [Releases](https://github.com/shawntz/cassh/releases):
    ```bash
+   brew tap shawntz/cassh
    brew install --cask cassh
    ```
 2. **Launch** cassh - the setup wizard opens automatically

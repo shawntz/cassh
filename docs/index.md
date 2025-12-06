@@ -20,8 +20,11 @@ Whether you're a solo developer managing personal projects or an enterprise team
 brew install gh
 gh auth login
 
-# 2. Download cassh from Releases and launch
-# 3. Setup wizard opens automatically — done!
+# 2. Install cassh
+brew tap shawntz/cassh
+brew install --cask cassh
+
+# 3. Launch cassh — setup wizard opens automatically — done!
 ```
 
 **Enterprise users** — see [Server Setup](server-setup.md) for CA and Entra configuration.

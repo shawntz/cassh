@@ -7,6 +7,7 @@ This guide covers distributing the `cassh` menu bar app to users.
 For personal GitHub.com use, install via Homebrew:
 
 ```bash
+brew tap shawntz/cassh
 brew install --cask cassh
 ```
 
