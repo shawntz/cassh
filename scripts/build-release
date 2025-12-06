@@ -1,19 +1,17 @@
 #!/bin/bash
 #
-# build-release - Build all cassh packages for distribution
+# build-release - Build cassh PKG installer for distribution
 #
 # Usage: ./scripts/build-release
 #
 # Prerequisites:
 #   1. Configure cassh.policy.toml with your settings
-#   2. Install create-dmg: brew install create-dmg (optional, for nicer DMG)
 #
 # This script will:
 #   - Validate your policy config exists
 #   - Build the menubar binary
 #   - Create the app bundle with embedded policy
-#   - Create DMG installer (requires sudo for disk mounting)
-#   - Create PKG installer for MDM deployment
+#   - Create PKG installer for MDM/Homebrew deployment
 #
 # Output files are placed in ./dist/
 
@@ -49,47 +47,40 @@ if ! grep -q "server_base_url" "$POLICY_FILE"; then
     exit 1
 fi
 
-if ! grep -q "github_enterprise_url" "$POLICY_FILE"; then
-    echo -e "${YELLOW}Warning: github_enterprise_url not set - SSH config auto-setup will be disabled${NC}"
+# Check for [github] section with enterprise_url
+if ! grep -q '^\[github\]' "$POLICY_FILE" || ! grep -q 'enterprise_url' "$POLICY_FILE"; then
+    echo -e "${RED}Error: [github] enterprise_url not set in $POLICY_FILE${NC}"
+    echo ""
+    echo "Add this to your policy file:"
+    echo "  [github]"
+    echo "  enterprise_url = \"https://github.yourcompany.com\""
+    exit 1
 fi
 
 echo -e "${GREEN}✓${NC} Policy config validated"
 echo ""
 
-# Check if running with sudo for DMG creation
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${YELLOW}Note: DMG creation requires sudo. You may be prompted for your password.${NC}"
-    echo ""
-fi
+# Clean previous build artifacts
+echo -e "${GREEN}[1/4]${NC} Cleaning previous build artifacts..."
+make clean
+echo -e "${GREEN}✓${NC} Clean complete"
+echo ""
 
-# Step 1: Build menubar binary
-echo -e "${GREEN}[1/4]${NC} Building menubar binary..."
+# Step 2: Build menubar binary
+echo -e "${GREEN}[2/4]${NC} Building menubar binary..."
 make menubar
 echo -e "${GREEN}✓${NC} Menubar binary built"
 echo ""
 
-# Step 2: Create app bundle
-echo -e "${GREEN}[2/4]${NC} Creating app bundle..."
-make app-bundle
+# Step 3: Create app bundle (enterprise mode with locked policy)
+echo -e "${GREEN}[3/4]${NC} Creating app bundle (enterprise)..."
+make app-bundle-enterprise
 echo -e "${GREEN}✓${NC} App bundle created"
-echo ""
-
-# Step 3: Create DMG
-echo -e "${GREEN}[3/4]${NC} Creating DMG installer..."
-# Create dist directory before sudo so it's user-owned
-mkdir -p dist
-if [ "$EUID" -ne 0 ]; then
-    sudo make dmg-only
-    # Fix ownership of files created by sudo
-    sudo chown -R "$USER" dist/
-else
-    make dmg-only
-fi
-echo -e "${GREEN}✓${NC} DMG created"
 echo ""
 
 # Step 4: Create PKG
 echo -e "${GREEN}[4/4]${NC} Creating PKG installer..."
+mkdir -p dist
 make pkg-only
 echo -e "${GREEN}✓${NC} PKG created"
 echo ""
@@ -99,13 +90,13 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║          Build Complete!              ║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
 echo ""
-echo "Output files:"
+echo "Output:"
 echo ""
-ls -lh dist/*.dmg dist/*.pkg 2>/dev/null | awk '{print "  " $NF " (" $5 ")"}'
+ls -lh dist/*.pkg 2>/dev/null | awk '{print "  " $NF " (" $5 ")"}'
 echo ""
-echo "Distribution options:"
-echo "  • DMG: Share directly with users for manual installation"
-echo "  • PKG: Upload to MDM (Jamf, Kandji, Mosyle) for enterprise deployment"
+echo "Distribution:"
+echo "  • MDM: Upload to Jamf, Kandji, Mosyle for enterprise deployment"
+echo "  • Homebrew: brew install --cask cassh (after publishing to tap)"
 echo ""
 echo -e "${YELLOW}Optional: Sign and notarize for Gatekeeper${NC}"
 echo "  make sign      # Requires APPLE_DEVELOPER_ID"
