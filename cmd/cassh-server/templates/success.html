@@ -285,6 +285,66 @@
             height: 14px;
             fill: #db61a2;
         }
+
+        /* Success checkmark animation */
+        .success-checkmark {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .checkmark-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        .checkmark-circle svg {
+            width: 20px;
+            height: 20px;
+            stroke: #fff;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        .checkmark-circle svg path {
+            stroke-dasharray: 30;
+            stroke-dashoffset: 30;
+            animation: drawCheck 0.4s ease-out 0.2s forwards;
+        }
+
+        @keyframes scaleIn {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes drawCheck {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .auto-install-btn.success {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            box-shadow: 0 4px 14px rgba(22, 163, 74, 0.5);
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -358,12 +418,69 @@
             setTimeout(() => btn.textContent = 'Copy', 1500);
         }
 
+        // Play a pleasant ding sound using Web Audio API
+        function playDing() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                // Create oscillator for the ding
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                // Pleasant bell-like frequency
+                oscillator.frequency.setValueAtTime(830, audioContext.currentTime); // G#5
+                oscillator.type = 'sine';
+
+                // Quick attack, longer decay for bell sound
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+
+                // Add a second higher harmonic for richness
+                const oscillator2 = audioContext.createOscillator();
+                const gainNode2 = audioContext.createGain();
+                oscillator2.connect(gainNode2);
+                gainNode2.connect(audioContext.destination);
+                oscillator2.frequency.setValueAtTime(1245, audioContext.currentTime); // E6
+                oscillator2.type = 'sine';
+                gainNode2.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode2.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.01);
+                gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+                oscillator2.start(audioContext.currentTime);
+                oscillator2.stop(audioContext.currentTime + 0.4);
+            } catch (e) {
+                console.log('Audio not available');
+            }
+        }
+
+        // Show success state with animated checkmark
+        function showSuccess(btn) {
+            btn.classList.add('success');
+            btn.innerHTML = `
+                <span class="success-checkmark">
+                    <span class="checkmark-circle">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </span>
+                    <span>Installed</span>
+                </span>
+            `;
+            playDing();
+        }
+
         async function autoInstall() {
             const cert = document.getElementById('certData').value;
             const btn = document.querySelector('.auto-install-btn');
             const originalHTML = btn.innerHTML;
 
-            btn.innerHTML = 'Opening cassh.app...';
+            btn.innerHTML = 'Installing...';
             btn.disabled = true;
 
             // Check if we're on HTTPS - if so, use URL scheme (avoids mixed content)
@@ -380,15 +497,12 @@
 
                 // Show success state (app will handle the rest)
                 setTimeout(() => {
-                    btn.innerHTML = 'Opened cassh.app ✓';
-                    btn.style.background = 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)';
-                }, 500);
+                    showSuccess(btn);
+                }, 400);
                 return;
             }
 
             // Fallback for HTTP (local development): use fetch
-            btn.innerHTML = 'Installing...';
-
             const endpoints = [
                 'http://localhost:52849/install-cert',
                 'http://127.0.0.1:52849/install-cert'
@@ -404,8 +518,7 @@
                     });
 
                     if (response.ok) {
-                        btn.innerHTML = 'Installed ✓';
-                        btn.style.background = 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)';
+                        showSuccess(btn);
                         return;
                     } else {
                         const text = await response.text();

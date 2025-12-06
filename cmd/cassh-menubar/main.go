@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"embed"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"html/template"
 	"log"
@@ -529,13 +530,13 @@ func ensureSSHKey(keyPath string) error {
 		return fmt.Errorf("failed to convert public key: %w", err)
 	}
 
-	// Write private key
+	// Write private key (must encode the PEM block to get proper format)
 	privPEM, err := ssh.MarshalPrivateKey(priv, "cassh generated key")
 	if err != nil {
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
 
-	if err := os.WriteFile(keyPath, privPEM.Bytes, 0600); err != nil {
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(privPEM), 0600); err != nil {
 		return fmt.Errorf("failed to write private key: %w", err)
 	}
 
