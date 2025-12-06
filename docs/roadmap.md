@@ -30,6 +30,9 @@ This page tracks the development roadmap for cassh. Features are organized by st
 - [x] **One-click Renewal** - Browser-based authentication
 - [x] **Auto SSH Key Generation** - Creates Ed25519 key if missing
 - [x] **ssh-agent Integration** - Automatic certificate loading
+- [x] **Setup Wizard** - First-run configuration for OSS users
+- [x] **Multi-Connection Support** - Manage multiple GitHub accounts
+- [x] **Personal GitHub.com Support** - SSH key management via `gh` CLI
 
 ### Server
 
@@ -41,10 +44,10 @@ This page tracks the development roadmap for cassh. Features are organized by st
 
 ### Distribution
 
-- [x] **DMG Installer** - Drag-and-drop installation
-- [x] **PKG Installer** - MDM-compatible package
+- [x] **PKG Installer** - MDM-compatible package and Homebrew support
 - [x] **App Bundle** - Proper macOS app structure
-- [x] **GitHub Actions Release** - Automated builds on tag
+- [x] **GitHub Actions Release** - Automated builds on tag with signing and notarization
+- [x] **Homebrew Cask** - `brew install --cask cassh`
 
 ---
 
@@ -99,6 +102,35 @@ This page tracks the development roadmap for cassh. Features are organized by st
 - [ ] **GitHub App Integration** - Fine-grained repo permissions
 - [ ] **Okta Support** - Alternative to Entra ID
 - [ ] **Google Workspace Support** - Google as identity provider
+
+### Platform Extensibility
+
+cassh is designed to be extensible beyond GitHub. Future platform support:
+
+| Platform | Priority | Status | Notes |
+|----------|----------|--------|-------|
+| GitHub Enterprise | High | :white_check_mark: Complete | Full SSH certificate support |
+| GitHub.com (Personal) | High | :white_check_mark: Complete | SSH key-based auth via `gh` CLI |
+| GitLab | Medium | :memo: Planned | SSH certificates supported, needs OIDC integration |
+| Bitbucket | Medium | :memo: Planned | SSH key management API available |
+| Azure DevOps | Low | :bulb: Considering | SSH key support varies by plan |
+
+#### GitLab Support Roadmap
+
+GitLab supports SSH certificates with a user-scoped CA. Implementation would include:
+
+- [ ] GitLab OIDC provider integration
+- [ ] GitLab SSH CA configuration
+- [ ] Support for self-hosted GitLab instances
+- [ ] GitLab.com SaaS support
+
+#### Bitbucket Support Roadmap
+
+Bitbucket uses SSH keys (not certificates). Implementation would include:
+
+- [ ] Bitbucket Cloud API integration for key management
+- [ ] Bitbucket Data Center support
+- [ ] Automatic key rotation
 
 ---
 
