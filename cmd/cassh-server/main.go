@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -238,7 +239,9 @@ func (s *Server) handleDevAuth(w http.ResponseWriter, r *http.Request) {
 		Username:      "devuser",
 	}
 
-	log.Printf("🔓 DEV AUTH: Mock user authenticated: %s", userInfo.Email)
+	// Extract principal from OIDC claims based on config
+	principal := extractPrincipal(userInfo, s.config.GitHubPrincipalSource)
+	log.Printf("🔓 DEV AUTH: Mock user authenticated: %s (principal: %s)", userInfo.Email, principal)
 
 	// Parse the user's public key
 	sshPubKey, err := ca.ParsePublicKey([]byte(pubKey))
@@ -250,7 +253,7 @@ func (s *Server) handleDevAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Generate cert
 	keyID := fmt.Sprintf("cassh:dev:%s:%d", userInfo.Email, time.Now().Unix())
-	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, userInfo.Username)
+	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, principal)
 	if err != nil {
 		log.Printf("Cert signing error: %v", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
@@ -299,7 +302,9 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("User authenticated: %s (%s)", userInfo.Email, userInfo.Username)
+	// Extract principal from OIDC claims based on config
+	principal := extractPrincipal(userInfo, s.config.GitHubPrincipalSource)
+	log.Printf("User authenticated: %s (principal: %s)", userInfo.Email, principal)
 
 	// Parse the user's public key
 	sshPubKey, err := ca.ParsePublicKey([]byte(pubKey))
@@ -311,7 +316,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Generate cert
 	keyID := fmt.Sprintf("cassh:%s:%d", userInfo.Email, time.Now().Unix())
-	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, userInfo.Username)
+	cert, err := s.ca.SignPublicKey(sshPubKey, keyID, principal)
 	if err != nil {
 		log.Printf("Cert signing error: %v", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
@@ -390,4 +395,35 @@ func logMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start))
 	})
+}
+
+// extractPrincipal derives the SSH certificate principal from OIDC user info based on config
+// principalSource options:
+//   - "email_prefix" (default): extract username before @ from email/UPN (e.g., "shawn@schwartz.so" -> "shawn")
+//   - "email": use full email as principal
+//   - "username": use the preferred_username claim as-is
+func extractPrincipal(userInfo *oidc.UserInfo, principalSource string) string {
+	switch principalSource {
+	case "email":
+		return userInfo.Email
+	case "username":
+		return userInfo.Username
+	case "email_prefix", "":
+		// Default: extract username part from email/UPN
+		emailOrUPN := userInfo.Username
+		if emailOrUPN == "" {
+			emailOrUPN = userInfo.Email
+		}
+		if idx := strings.Index(emailOrUPN, "@"); idx != -1 {
+			return emailOrUPN[:idx]
+		}
+		return emailOrUPN
+	default:
+		// Fallback to email_prefix behavior
+		emailOrUPN := userInfo.Username
+		if idx := strings.Index(emailOrUPN, "@"); idx != -1 {
+			return emailOrUPN[:idx]
+		}
+		return emailOrUPN
+	}
 }
