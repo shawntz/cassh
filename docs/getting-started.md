@@ -46,6 +46,9 @@ brew install --cask cassh
 3. **Add Personal Account** - Enter your GitHub username, choose rotation policy
 4. **Done!** - cassh generates a key and uploads it via `gh` CLI
 
+<!-- SCREENSHOT: Setup wizard with Personal Account modal open -->
+<!-- Suggested: ../assets/screenshots/personal-setup-wizard.png -->
+<!-- Size: ~600px wide -->
 
 Your SSH config is automatically updated. Just `git clone` and go!
 

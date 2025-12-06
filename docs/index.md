@@ -9,6 +9,10 @@
 
 Whether you're a solo developer managing personal projects or an enterprise team with hundreds of engineers, `cassh` brings security best practices to your SSH workflow — without the complexity.
 
+<!-- SCREENSHOT: Hero image showing menu bar with multiple connections (enterprise + personal) -->
+<!-- Suggested: assets/screenshots/hero-menubar.png -->
+<!-- Size: ~800px wide, showing the menu bar dropdown with green status indicators -->
+
 ---
 
 ## Get Started in 60 Seconds
@@ -29,6 +33,9 @@ brew install --cask cassh
 
 **Enterprise users** — see [Server Setup](server-setup.md) for CA and Entra configuration.
 
+<!-- SCREENSHOT: Setup wizard showing the two options (Enterprise / Personal) -->
+<!-- Suggested: assets/screenshots/setup-wizard.png -->
+<!-- Size: ~600px wide -->
 
 ---
 
@@ -50,6 +57,10 @@ The `gh` CLI is great for the initial setup, but it doesn't manage your keys:
 
 > **Security isn't just for enterprises.** Your personal GitHub account has access to your private repos, your contributions to other projects, and possibly deploy keys. Treat it accordingly.
 
+<!-- SCREENSHOT: Key rotation dropdown in setup wizard showing duration options -->
+<!-- Suggested: assets/screenshots/key-rotation-options.png -->
+<!-- Size: ~400px wide -->
+
 ### For Enterprise Teams
 
 Permanent SSH keys are a security liability:
@@ -63,11 +74,22 @@ Permanent SSH keys are a security liability:
 
 cassh issues **12-hour certificates** signed by your internal CA. No revocation lists to manage, no keys to track, no manual intervention needed.
 
+<!-- SCREENSHOT: Enterprise flow - showing the meme landing page with SSO button -->
+<!-- Suggested: assets/screenshots/enterprise-sso-landing.png -->
+<!-- Size: ~600px wide -->
+
 ---
 
 ## One App, All Your GitHub Accounts
 
 Most developers juggle multiple GitHub accounts — work and personal, or multiple organizations. cassh manages them all from a single menu bar app.
+
+<!-- SCREENSHOT: Menu bar showing multiple connections with different statuses -->
+<!-- Suggested: assets/screenshots/multi-account-menubar.png -->
+<!-- Size: ~400px wide, showing:
+  - "Work GitHub" (enterprise) - green status, "Valid for 8h"
+  - "Personal GitHub" (personal) - green status, "Rotates in 6d"
+-->
 
 - **Enterprise connections** use certificates that auto-expire
 - **Personal connections** use keys with configurable rotation
@@ -107,6 +129,10 @@ Behind the scenes:
 4. Tracks key age and rotates per your policy
 5. On rotation: deletes old key from GitHub, generates new key, uploads new key
 
+<!-- SCREENSHOT: Personal connection success message after setup -->
+<!-- Suggested: assets/screenshots/personal-setup-success.png -->
+<!-- Size: ~500px wide -->
+
 ### Enterprise Flow (GitHub Enterprise)
 
 ```
@@ -119,6 +145,10 @@ Behind the scenes:
 3. Server signs your public key with the CA
 4. Certificate returned and installed automatically
 5. Certificate expires in 12 hours — repeat as needed
+
+<!-- SCREENSHOT: Enterprise certificate success page -->
+<!-- Suggested: assets/screenshots/enterprise-cert-success.png -->
+<!-- Size: ~600px wide -->
 
 ## Architecture
 

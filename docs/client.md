@@ -207,11 +207,19 @@ Share this with your users:
 4. Complete SSO login in your browser
 5. Status will show green when active
 
+<!-- SCREENSHOT: Menu bar dropdown showing connections and status -->
+<!-- Suggested: assets/screenshots/menubar-dropdown.png -->
+<!-- Size: ~400px wide -->
+
 ### Daily Usage
 
 - **Green status** = Key/certificate valid, you can push/pull
 - **Yellow status** = Expiring soon
 - **Red status** = Expired, click to renew
+
+<!-- SCREENSHOT: Menu bar showing green/yellow/red status states -->
+<!-- Suggested: assets/screenshots/status-indicators.png -->
+<!-- Size: ~300px wide, composite showing all three states -->
 
 **Enterprise certificates** are valid for 12 hours by default. **Personal keys** rotate based on your chosen policy.
 
