@@ -8,6 +8,7 @@
 
     <welcome file="welcome.html"/>
     <license file="license.html"/>
+    <readme file="security.html"/>
     <conclusion file="conclusion.html"/>
 
     <choices-outline>

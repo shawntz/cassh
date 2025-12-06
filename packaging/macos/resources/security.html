@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            color: #333;
+            font-size: 1.05rem;
+            line-height: 1.5rem;
+        }
+        h1 {
+            color: #1a1a2e;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+        p {
+            margin: 15px 0;
+        }
+        ul {
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+        li {
+            margin: 10px 0;
+        }
+        .icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="icon">🔐</div>
+    <h1>Security Notice</h1>
+
+    <p><strong>cassh</strong> is a privileged authentication system that manages SSH certificates for accessing protected resources.</p>
+
+    <p>By installing this software, you acknowledge that:</p>
+
+    <ul>
+        <li><strong>SSH certificates provide access to protected systems</strong> — Your certificate grants temporary access to GitHub Enterprise and other configured resources.</li>
+        <li><strong>Certificate validity is controlled by your organization's policy</strong> — Certificates typically expire after 12 hours and must be renewed via SSO.</li>
+        <li><strong>You are responsible for protecting your device and credentials</strong> — Do not share your device or allow unauthorized access while certificates are active.</li>
+        <li><strong>Certificates are tied to your identity</strong> — All actions performed with your certificate are attributable to you.</li>
+    </ul>
+
+    <p>If you suspect your certificate has been compromised, contact your DevSecOps team immediately.</p>
+</body>
+</html>
