@@ -2,9 +2,23 @@
 
 This guide covers distributing the `cassh` menu bar app to users.
 
+## Quick Install (Personal Users)
+
+For personal GitHub.com use, install via Homebrew:
+
+```bash
+brew install --cask cassh
+```
+
+Or download the PKG from [Releases](https://github.com/shawntz/cassh/releases).
+
+The setup wizard will guide you through adding your GitHub.com account.
+
+---
+
 ## macOS Menu Bar App
 
-The menu bar app provides a visual indicator of certificate status and one-click renewal.
+The menu bar app provides a visual indicator of certificate/key status and one-click renewal.
 
 ### Building the App
 
@@ -14,7 +28,7 @@ The menu bar app provides a visual indicator of certificate status and one-click
 ./scripts/build-release
 ```
 
-This script validates your config, builds the binary, creates the app bundle, DMG, and PKG.
+This script validates your config, builds the binary, creates the app bundle and PKG.
 
 **Or build step-by-step:**
 
@@ -25,10 +39,7 @@ make menubar
 # Create the app bundle
 make app-bundle
 
-# Create DMG for manual distribution (requires sudo for disk image mounting)
-sudo make dmg
-
-# Create PKG for MDM deployment
+# Create PKG installer
 make pkg
 ```
 
@@ -88,12 +99,11 @@ The PKG installs:
 
 For smaller deployments or testing:
 
-### DMG Installation
+### PKG Installation
 
-1. Download the DMG from [Releases](https://github.com/shawntz/cassh/releases)
-2. Open the DMG
-3. Drag cassh to Applications
-4. Configure the client policy (see below)
+1. Download the PKG from [Releases](https://github.com/shawntz/cassh/releases)
+2. Open the PKG and follow the installer
+3. Configure the client policy (see below)
 
 ### Client Configuration
 
@@ -103,11 +113,13 @@ Create the policy file:
 mkdir -p ~/Library/Application\ Support/cassh
 cat > ~/Library/Application\ Support/cassh/cassh.policy.toml << 'EOF'
 server_base_url = "https://cassh.yourcompany.com"
-github_enterprise_url = "https://github.yourcompany.com"
+
+[github]
+enterprise_url = "https://github.yourcompany.com"
 EOF
 ```
 
-The `github_enterprise_url` is required for automatic SSH config setup. When you generate a certificate, `cassh` will automatically add the correct SSH config entry for your GitHub Enterprise instance.
+The `[github] enterprise_url` is required for automatic SSH config setup. When you generate a certificate, `cassh` will automatically add the correct SSH config entry for your GitHub Enterprise instance.
 
 ### Auto-Start on Login
 
@@ -178,21 +190,29 @@ make cli
 
 Share this with your users:
 
-### First Time Setup
+### First Time Setup (Personal GitHub.com)
+
+1. **Launch cassh** - Setup wizard opens automatically
+2. **Click "Add Personal Account"**
+3. **Enter your GitHub username**
+4. **Choose rotation policy** - 4 hours to 90 days (7 days recommended for personal machines)
+5. **Done!** - cassh generates and uploads your SSH key
+
+### First Time Setup (Enterprise)
 
 1. Look for the **terminal icon** in your menu bar (top-right)
 2. Click it to see the dropdown menu
-3. Select **"Generate / Renew Cert"**
+3. Select your enterprise connection
 4. Complete SSO login in your browser
 5. Status will show green when active
 
 ### Daily Usage
 
-- **Green status** = Certificate valid, you can push/pull
-- **Yellow status** = Certificate expiring soon
-- **Red status** = Certificate expired, click to renew
+- **Green status** = Key/certificate valid, you can push/pull
+- **Yellow status** = Expiring soon
+- **Red status** = Expired, click to renew
 
-Certificates are valid for 12 hours. The app will notify you before expiration.
+**Enterprise certificates** are valid for 12 hours by default. **Personal keys** rotate based on your chosen policy.
 
 ### Troubleshooting
 
@@ -207,7 +227,7 @@ Certificates are valid for 12 hours. The app will notify you before expiration.
 
 ## Git SSH Configuration
 
-`cassh` automatically configures your SSH config when you generate a certificate (if `github_enterprise_url` is set in your policy). However, you also need to ensure your Git repositories are using SSH URLs.
+`cassh` automatically configures your SSH config when you generate a certificate (if `[github] enterprise_url` is set in your policy). However, you also need to ensure your Git repositories are using SSH URLs.
 
 ### Check Your Remote URL
 
@@ -234,9 +254,10 @@ Host github.yourcompany.com
     User git
     IdentityFile ~/.ssh/cassh_id_ed25519
     IdentitiesOnly yes
+    IdentityAgent none
 ```
 
-This ensures Git uses your cassh certificate for authentication.
+This ensures Git uses your cassh certificate for authentication. The `IdentityAgent none` setting bypasses 1Password and other SSH agent managers that might otherwise intercept the connection.
 
 ### Verify SSH Connection
 
