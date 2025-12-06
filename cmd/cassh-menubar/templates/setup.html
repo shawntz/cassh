@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cassh Setup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        html {
+            background: #0a0a0a;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0a;
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 40px 20px 120px 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .header p {
+            color: #888;
+            font-size: 1.1rem;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            transition: all 0.2s ease;
+        }
+        .card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .card p {
+            color: #888;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #0066ff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .btn:hover {
+            background: #0052cc;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .connections {
+            margin-top: 40px;
+        }
+        .connections h3 {
+            font-size: 1rem;
+            color: #888;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .connection-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .connection-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .btn-delete {
+            background: transparent;
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: #ff5252;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-delete:hover {
+            background: rgba(255, 82, 82, 0.1);
+            border-color: #ff5252;
+        }
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .connection-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #888;
+        }
+        .connection-status.active {
+            background: #00c853;
+        }
+        .connection-status.expired {
+            background: #ff5252;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #888;
+            margin-left: 8px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #0066ff;
+        }
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .form-group select option {
+            background: #111;
+            color: #fff;
+        }
+        .form-group .hint {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 6px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #111;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-close:hover {
+            color: #fff;
+        }
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .error {
+            color: #ff5252;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+        .success {
+            color: #00c853;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #444;
+            background: linear-gradient(transparent, #0a0a0a 30%);
+        }
+        .footer a {
+            color: #666;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+        .footer a:hover {
+            color: #888;
+        }
+        .footer-links {
+            margin-bottom: 0.5rem;
+        }
+        .footer-links a {
+            margin: 0 0.75rem;
+        }
+        .sponsor-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: #21262d;
+            border: 1px solid #363b42;
+            color: #c9d1d9;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-top: 0.5rem;
+            transition: border-color 0.15s;
+        }
+        .sponsor-btn:hover {
+            border-color: #db61a2;
+        }
+        .sponsor-btn svg {
+            width: 14px;
+            height: 14px;
+            fill: #db61a2;
+        }
+        .mascot {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .mascot img {
+            max-width: 180px;
+            height: auto;
+            border-radius: 12px;
+            filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.5));
+        }
+        .mascot-quote {
+            margin-top: 12px;
+            font-style: italic;
+            color: #888;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="mascot" id="mascot"></div>
+
+        <div class="header">
+            <h1>cassh</h1>
+            <p>Ephemeral SSH certificates for GitHub</p>
+        </div>
+
+        <div class="card" onclick="openModal('enterprise')">
+            <div class="card-icon">&#127970;</div>
+            <h2>GitHub Enterprise</h2>
+            <p>Connect to your company's GitHub Enterprise instance using SSH certificates signed by your organization's CA.</p>
+            <button class="btn">Add Enterprise Connection</button>
+        </div>
+
+        <div class="card" onclick="openModal('personal')">
+            <div class="card-icon">&#128100;</div>
+            <h2>GitHub.com (Personal)</h2>
+            <p>Connect to GitHub.com using SSH keys. Requires the GitHub CLI (gh) for automatic key management.</p>
+            <button class="btn btn-secondary">Add Personal Account</button>
+        </div>
+
+        <div class="connections" id="connections-section" style="display: none;">
+            <h3>Your Connections</h3>
+            <div id="connections-list"></div>
+        </div>
+    </div>
+
+    <!-- Enterprise Modal -->
+    <div class="modal" id="enterprise-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Enterprise Connection</h2>
+                <button class="modal-close" onclick="closeModal('enterprise')">&times;</button>
+            </div>
+            <form id="enterprise-form" onsubmit="submitEnterprise(event)">
+                <div class="form-group">
+                    <label for="enterprise-name">Connection Name</label>
+                    <input type="text" id="enterprise-name" placeholder="e.g., Work GitHub" required>
+                    <p class="hint">A friendly name for this connection</p>
+                </div>
+                <div class="form-group">
+                    <label for="enterprise-server">cassh Server URL</label>
+                    <input type="url" id="enterprise-server" placeholder="https://cassh.yourcompany.com" required>
+                    <p class="hint">The URL of your organization's cassh server</p>
+                </div>
+                <div class="form-group">
+                    <label for="enterprise-github">GitHub Enterprise URL</label>
+                    <input type="url" id="enterprise-github" placeholder="https://github.yourcompany.com" required>
+                    <p class="hint">Your GitHub Enterprise instance URL</p>
+                </div>
+                <div id="enterprise-error" class="error" style="display: none;"></div>
+                <div id="enterprise-success" class="success" style="display: none;"></div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('enterprise')">Cancel</button>
+                    <button type="submit" class="btn">Add Connection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Personal Modal -->
+    <div class="modal" id="personal-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Personal Account</h2>
+                <button class="modal-close" onclick="closeModal('personal')">&times;</button>
+            </div>
+            <form id="personal-form" onsubmit="submitPersonal(event)">
+                <div class="form-group">
+                    <label for="personal-name">Connection Name</label>
+                    <input type="text" id="personal-name" placeholder="e.g., Personal GitHub" required>
+                    <p class="hint">A friendly name for this connection</p>
+                </div>
+                <div class="form-group">
+                    <label for="personal-username">GitHub Username</label>
+                    <input type="text" id="personal-username" placeholder="your-username" required>
+                    <p class="hint">Your GitHub.com username</p>
+                </div>
+                <div class="form-group">
+                    <label for="personal-rotation">Key Rotation</label>
+                    <select id="personal-rotation">
+                        <optgroup label="Hours">
+                            <option value="4">Every 4 hours</option>
+                            <option value="8">Every 8 hours</option>
+                            <option value="12" selected>Every 12 hours</option>
+                            <option value="24">Every 24 hours</option>
+                        </optgroup>
+                        <optgroup label="Days">
+                            <option value="168">Every 7 days</option>
+                            <option value="336">Every 14 days</option>
+                            <option value="672">Every 28 days</option>
+                            <option value="2160">Every 90 days</option>
+                        </optgroup>
+                        <optgroup label="Manual">
+                            <option value="0">No automatic rotation</option>
+                        </optgroup>
+                    </select>
+                    <p class="hint">How often to automatically rotate your SSH key</p>
+                </div>
+                <div id="personal-error" class="error" style="display: none;"></div>
+                <div id="personal-success" class="success" style="display: none;"></div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('personal')">Cancel</button>
+                    <button type="submit" class="btn">Add Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openModal(type) {
+            document.getElementById(type + '-modal').classList.add('active');
+        }
+
+        function closeModal(type) {
+            document.getElementById(type + '-modal').classList.remove('active');
+            // Clear form
+            document.getElementById(type + '-form').reset();
+            document.getElementById(type + '-error').style.display = 'none';
+            document.getElementById(type + '-success').style.display = 'none';
+        }
+
+        async function submitEnterprise(e) {
+            e.preventDefault();
+            const errorEl = document.getElementById('enterprise-error');
+            const successEl = document.getElementById('enterprise-success');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+
+            const data = {
+                name: document.getElementById('enterprise-name').value,
+                server_url: document.getElementById('enterprise-server').value,
+                github_host: document.getElementById('enterprise-github').value
+            };
+
+            try {
+                const response = await fetch('/setup/add-enterprise', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.error) {
+                    errorEl.textContent = result.error;
+                    errorEl.style.display = 'block';
+                } else {
+                    successEl.textContent = 'Connection added successfully!';
+                    successEl.style.display = 'block';
+                    setTimeout(() => {
+                        closeModal('enterprise');
+                        loadConnections();
+                    }, 1500);
+                }
+            } catch (err) {
+                errorEl.textContent = 'Failed to add connection: ' + err.message;
+                errorEl.style.display = 'block';
+            }
+        }
+
+        async function submitPersonal(e) {
+            e.preventDefault();
+            const errorEl = document.getElementById('personal-error');
+            const successEl = document.getElementById('personal-success');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+
+            const data = {
+                name: document.getElementById('personal-name').value,
+                github_username: document.getElementById('personal-username').value,
+                key_rotation_hours: parseInt(document.getElementById('personal-rotation').value, 10)
+            };
+
+            try {
+                const response = await fetch('/setup/add-personal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.error) {
+                    errorEl.textContent = result.error;
+                    errorEl.style.display = 'block';
+                } else {
+                    successEl.textContent = 'Account added successfully!';
+                    successEl.style.display = 'block';
+                    setTimeout(() => {
+                        closeModal('personal');
+                        loadConnections();
+                    }, 1500);
+                }
+            } catch (err) {
+                errorEl.textContent = 'Failed to add account: ' + err.message;
+                errorEl.style.display = 'block';
+            }
+        }
+
+        async function loadConnections() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+
+                const section = document.getElementById('connections-section');
+                const list = document.getElementById('connections-list');
+
+                if (data.connections && data.connections.length > 0) {
+                    section.style.display = 'block';
+                    list.innerHTML = data.connections.map(conn => `
+                        <div class="connection-item">
+                            <div class="connection-info">
+                                <span class="connection-status ${conn.is_valid ? 'active' : 'expired'}"></span>
+                                <span>${conn.name}</span>
+                                <span class="badge">${conn.type}</span>
+                            </div>
+                            <div class="connection-actions">
+                                <span style="color: #666">${conn.github_host || 'github.com'}</span>
+                                <button class="btn-delete" onclick="deleteConnection('${conn.id}', '${conn.name}')">Remove</button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    section.style.display = 'none';
+                }
+            } catch (err) {
+                console.error('Failed to load connections:', err);
+            }
+        }
+
+        // Delete a connection
+        async function deleteConnection(id, name) {
+            if (!confirm(`Are you sure you want to remove "${name}"? This will delete the SSH key from GitHub and your local machine.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/setup/delete-connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+
+                const result = await response.json();
+                if (result.error) {
+                    alert('Failed to remove connection: ' + result.error);
+                } else {
+                    loadConnections();
+                }
+            } catch (err) {
+                alert('Failed to remove connection: ' + err.message);
+            }
+        }
+
+        // Meme quotes
+        const mascots = [
+            {
+                image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="50" x="50" text-anchor="middle" font-size="60">👸</text></svg>',
+                quotes: [
+                    "Oh my glob, your SSH keys are like, SO expired!",
+                    "Whatever, I'm getting cheese fries... after I renew your cert.",
+                    "These certificates are like, totally mathematical!",
+                    "Ugh, fine! I'll manage your SSH keys. But only because I'm amazing."
+                ]
+            },
+            {
+                image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="50" x="50" text-anchor="middle" font-size="60">🦥</text></svg>',
+                quotes: [
+                    "Let... me... check... your... certificate... status...",
+                    "Ha... ha... ha... your key... rotated...",
+                    "I'm... going... to... sign... this... cert...",
+                    "Nice... and... slow... that's... how... we... SSH..."
+                ]
+            }
+        ];
+
+        // Load random mascot
+        function loadMascot() {
+            const mascot = mascots[Math.floor(Math.random() * mascots.length)];
+            const quote = mascot.quotes[Math.floor(Math.random() * mascot.quotes.length)];
+            const container = document.getElementById('mascot');
+            container.innerHTML = `
+                <img src="${mascot.image}" alt="Mascot" onerror="this.style.display='none'">
+                <div class="mascot-quote">"${quote}"</div>
+            `;
+        }
+
+        // Load connections and mascot on page load
+        loadConnections();
+        loadMascot();
+
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal.active').forEach(m => {
+                    m.classList.remove('active');
+                });
+            }
+        });
+
+        // Close modal on backdrop click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+    </script>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="https://github.com/shawntz/cassh" target="_blank">GitHub</a>
+            <a href="https://shawnschwartz.com/cassh" target="_blank">Docs</a>
+        </div>
+        <a href="https://github.com/sponsors/shawntz" target="_blank" class="sponsor-btn">
+            <svg viewBox="0 0 16 16"><path d="M4.25 2.5c-1.336 0-2.75 1.164-2.75 3 0 2.15 1.58 4.144 3.365 5.682A20.565 20.565 0 008 13.393a20.561 20.561 0 003.135-2.211C12.92 9.644 14.5 7.65 14.5 5.5c0-1.836-1.414-3-2.75-3-1.373 0-2.609.986-3.029 2.456a.75.75 0 01-1.442 0C6.859 3.486 5.623 2.5 4.25 2.5z"></path></svg>
+            Sponsor
+        </a>
+        <div style="margin-top: 0.5rem;">© 2025 Shawn Schwartz. Open source under Apache 2.0</div>
+    </footer>
+</body>
+</html>
