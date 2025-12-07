@@ -21,6 +21,9 @@ void showAboutDialog(const char *version, const char *buildCommit) {
         [aboutWindow setTitle:@"About cassh"];
         [aboutWindow center];
 
+        // Float above other windows (same level as setup wizard)
+        [aboutWindow setLevel:NSFloatingWindowLevel];
+
         NSView *contentView = [aboutWindow contentView];
 
         // App Icon
