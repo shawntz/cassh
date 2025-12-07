@@ -229,13 +229,18 @@ func handleInstallCertURL(u *url.URL) {
 
 	log.Println("Certificate installed successfully via URL scheme")
 
-	// Send success notification
+	// Parse cert to get expiration info
+	parsedCert, _ := ca.ParseCertificate([]byte(cert))
+	certInfo := ca.GetCertInfo(parsedCert)
+
+	// Send success notification with time remaining
 	connName := "GitHub Enterprise"
 	if conn != nil {
 		connName = conn.Name
 	}
-	sendNotification("cassh Certificate Activated",
-		fmt.Sprintf("Your SSH certificate for %s is now active.", connName),
+	timeRemaining := formatDuration(certInfo.TimeLeft)
+	sendNotification("Certificate Activated",
+		fmt.Sprintf("%s is now active. Valid for %s.", connName, timeRemaining),
 		false)
 
 	// Update connection status
