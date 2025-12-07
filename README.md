@@ -93,6 +93,7 @@ Most developers juggle multiple GitHub accounts — work and personal, or multip
 |---------|:--------:|:----------:|
 | One-click setup wizard | ✓ | ✓ |
 | Automatic SSH config | ✓ | ✓ |
+| Per-connection Git identity | ✓ | ✓ |
 | Menu bar status indicator | ✓ | ✓ |
 | Key/cert rotation | ✓ (configurable) | ✓ (12h default) |
 | Multi-account support | ✓ | ✓ |
@@ -128,9 +129,11 @@ Click menu bar → Generate Certificate → SSO login → Certificate installed
 Behind the scenes:
 1. Opens browser to your cassh server
 2. Authenticates via Microsoft Entra ID
-3. Server signs your public key with the CA
-4. Certificate returned and installed automatically
+3. Server signs your public key with the CA (includes `login@HOSTNAME` extension)
+4. Certificate returned and installed automatically via `cassh://` URL scheme
 5. Certificate expires in 12 hours — repeat as needed
+
+**Setup**: Just paste any SSH clone URL from your GitHub Enterprise (e.g., `user_123@github.company.com:org/repo.git`) and cassh extracts the hostname and SCIM-provisioned username automatically.
 
 ---
 
@@ -187,9 +190,12 @@ type = "enterprise"
 name = "Work GitHub"
 server_url = "https://cassh.yourcompany.com"
 github_host = "github.yourcompany.com"
+github_username = "user_123"  # SCIM-provisioned username from SSH clone URL
 ssh_key_path = "~/.ssh/cassh_work_id_ed25519"
 ssh_cert_path = "~/.ssh/cassh_work_id_ed25519-cert.pub"
 ```
+
+**Git Identity**: cassh can also manage per-connection git identities. When you add a connection, optionally specify your `user.name` and `user.email`. cassh uses Git's `includeIf` to automatically apply the correct identity based on the repo's remote URL. Your work repos use your work email, personal repos use your personal email — automatically.
 
 See the **[Configuration Reference](https://shawnschwartz.com/cassh/configuration/)** for all options, or check out [`config.example.toml`](config.example.toml) for a complete example.
 
