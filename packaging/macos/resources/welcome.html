@@ -47,8 +47,35 @@
             text-decoration: underline;
         }
     </style>
+    <script>
+        // Aggressively prevent focus to allow installer buttons to work
+        (function() {
+            function blurAll() {
+                if (document.activeElement && document.activeElement !== document.body) {
+                    document.activeElement.blur();
+                }
+                document.body.blur();
+            }
+
+            // Blur on load
+            blurAll();
+
+            // Blur on any focus event
+            document.addEventListener('focus', blurAll, true);
+            document.addEventListener('focusin', blurAll, true);
+
+            // Blur periodically for first second
+            var blurInterval = setInterval(blurAll, 50);
+            setTimeout(function() { clearInterval(blurInterval); }, 1000);
+
+            // Prevent all keyboard events from being captured
+            document.addEventListener('keydown', function(e) { e.stopPropagation(); }, true);
+            document.addEventListener('keyup', function(e) { e.stopPropagation(); }, true);
+            document.addEventListener('keypress', function(e) { e.stopPropagation(); }, true);
+        })();
+    </script>
 </head>
-<body>
+<body tabindex="-1">
     <div class="icon">
         <img src="data:image/png;base64,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" alt="cassh icon">
     </div>

@@ -65,8 +65,26 @@
             margin: 12px 0;
         }
     </style>
+    <script>
+        (function() {
+            function blurAll() {
+                if (document.activeElement && document.activeElement !== document.body) {
+                    document.activeElement.blur();
+                }
+                document.body.blur();
+            }
+            blurAll();
+            document.addEventListener('focus', blurAll, true);
+            document.addEventListener('focusin', blurAll, true);
+            var blurInterval = setInterval(blurAll, 50);
+            setTimeout(function() { clearInterval(blurInterval); }, 1000);
+            document.addEventListener('keydown', function(e) { e.stopPropagation(); }, true);
+            document.addEventListener('keyup', function(e) { e.stopPropagation(); }, true);
+            document.addEventListener('keypress', function(e) { e.stopPropagation(); }, true);
+        })();
+    </script>
 </head>
-<body>
+<body tabindex="-1">
     <h1>Apache License, Version 2.0</h1>
 
     <div class="copyright">
