@@ -68,8 +68,49 @@ void handleCasshURL(char* url);
 static WebViewDelegate* navDelegate = nil;
 static WindowDelegate* windowDelegate = nil;
 
+// Setup Edit menu for copy/paste support
+void setupEditMenu() {
+    static BOOL menuSetup = NO;
+    if (menuSetup) return;
+    menuSetup = YES;
+
+    // Get or create main menu
+    NSMenu *mainMenu = [NSApp mainMenu];
+    if (mainMenu == nil) {
+        mainMenu = [[NSMenu alloc] init];
+        [NSApp setMainMenu:mainMenu];
+    }
+
+    // Create Edit menu
+    NSMenuItem *editMenuItem = [[NSMenuItem alloc] initWithTitle:@"Edit" action:nil keyEquivalent:@""];
+    NSMenu *editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+
+    // Add standard editing items
+    NSMenuItem *cutItem = [[NSMenuItem alloc] initWithTitle:@"Cut" action:@selector(cut:) keyEquivalent:@"x"];
+    NSMenuItem *copyItem = [[NSMenuItem alloc] initWithTitle:@"Copy" action:@selector(copy:) keyEquivalent:@"c"];
+    NSMenuItem *pasteItem = [[NSMenuItem alloc] initWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
+    NSMenuItem *selectAllItem = [[NSMenuItem alloc] initWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
+    NSMenuItem *undoItem = [[NSMenuItem alloc] initWithTitle:@"Undo" action:@selector(undo:) keyEquivalent:@"z"];
+    NSMenuItem *redoItem = [[NSMenuItem alloc] initWithTitle:@"Redo" action:@selector(redo:) keyEquivalent:@"Z"];
+
+    [editMenu addItem:undoItem];
+    [editMenu addItem:redoItem];
+    [editMenu addItem:[NSMenuItem separatorItem]];
+    [editMenu addItem:cutItem];
+    [editMenu addItem:copyItem];
+    [editMenu addItem:pasteItem];
+    [editMenu addItem:[NSMenuItem separatorItem]];
+    [editMenu addItem:selectAllItem];
+
+    [editMenuItem setSubmenu:editMenu];
+    [mainMenu addItem:editMenuItem];
+}
+
 void openWebViewWindow(const char* urlStr, const char* title, int width, int height) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // Ensure Edit menu is set up for copy/paste
+        setupEditMenu();
+
         // If window already exists, just bring it to front
         if (setupWindow != nil && [setupWindow isVisible]) {
             [setupWindow makeKeyAndOrderFront:nil];
@@ -82,12 +123,19 @@ void openWebViewWindow(const char* urlStr, const char* title, int width, int hei
             return;
         }
 
-        // Create window
-        NSRect frame = NSMakeRect(0, 0, width, height);
+        // Calculate height based on screen size with padding
+        NSScreen *screen = [NSScreen mainScreen];
+        NSRect screenFrame = [screen visibleFrame];
+        CGFloat verticalPadding = 40; // padding from top and bottom
+        CGFloat calculatedHeight = screenFrame.size.height - (verticalPadding * 2);
+
+        // Create window with calculated height
+        NSRect frame = NSMakeRect(0, 0, width, calculatedHeight);
         NSWindowStyleMask style = NSWindowStyleMaskTitled |
                                   NSWindowStyleMaskClosable |
                                   NSWindowStyleMaskMiniaturizable |
-                                  NSWindowStyleMaskResizable;
+                                  NSWindowStyleMaskResizable |
+                                  NSWindowStyleMaskFullSizeContentView;
 
         setupWindow = [[NSWindow alloc] initWithContentRect:frame
                                                   styleMask:style
@@ -96,6 +144,11 @@ void openWebViewWindow(const char* urlStr, const char* title, int width, int hei
 
         [setupWindow setTitle:[NSString stringWithUTF8String:title]];
         [setupWindow setMinSize:NSMakeSize(500, 400)];
+
+        // Seamless titlebar (transparent, content extends underneath)
+        [setupWindow setTitlebarAppearsTransparent:YES];
+        [setupWindow setTitleVisibility:NSWindowTitleHidden];
+        [setupWindow setBackgroundColor:[NSColor colorWithWhite:0.04 alpha:1.0]];
 
         // Set window delegate to prevent app quit on close
         if (windowDelegate == nil) {
@@ -118,8 +171,30 @@ void openWebViewWindow(const char* urlStr, const char* title, int width, int hei
         // Enable developer extras for debugging (optional)
         [config.preferences setValue:@YES forKey:@"developerExtrasEnabled"];
 
-        // Create WebView
-        webView = [[WKWebView alloc] initWithFrame:frame configuration:config];
+        // Create a container view that will hold the webview
+        // This allows the titlebar to remain draggable
+        NSView *containerView = [[NSView alloc] initWithFrame:frame];
+        containerView.wantsLayer = YES;
+        containerView.layer.backgroundColor = [[NSColor colorWithWhite:0.04 alpha:1.0] CGColor];
+
+        // Get the titlebar height
+        CGFloat titlebarHeight = frame.size.height - [setupWindow contentLayoutRect].size.height;
+
+        // Create WebView sized to fit below the titlebar
+        NSRect webViewFrame = NSMakeRect(0, 0, frame.size.width, frame.size.height - titlebarHeight);
+        webView = [[WKWebView alloc] initWithFrame:webViewFrame configuration:config];
+        webView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
+        // Disable overscroll bounce for native feel
+        // On macOS, find the scroll view in the view hierarchy
+        for (NSView *subview in [webView subviews]) {
+            if ([subview isKindOfClass:[NSScrollView class]]) {
+                NSScrollView *scrollView = (NSScrollView *)subview;
+                [scrollView setVerticalScrollElasticity:NSScrollElasticityNone];
+                [scrollView setHorizontalScrollElasticity:NSScrollElasticityNone];
+                break;
+            }
+        }
 
         // Set navigation delegate
         if (navDelegate == nil) {
@@ -127,8 +202,12 @@ void openWebViewWindow(const char* urlStr, const char* title, int width, int hei
         }
         webView.navigationDelegate = navDelegate;
 
-        // Set as content view
-        [setupWindow setContentView:webView];
+        // Add webview to container
+        [containerView addSubview:webView];
+        containerView.autoresizesSubviews = YES;
+
+        // Set container as content view
+        [setupWindow setContentView:containerView];
 
         // Load URL
         NSURL *url = [NSURL URLWithString:[NSString stringWithUTF8String:urlStr]];
