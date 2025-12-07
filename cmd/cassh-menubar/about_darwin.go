@@ -9,10 +9,11 @@ package main
 #import <Cocoa/Cocoa.h>
 
 void showAboutDialog(const char *version, const char *buildCommit) {
+    // Copy strings BEFORE dispatch_async to avoid race condition with Go's defer
+    NSString *nsVersion = (version && strlen(version) > 0) ? [NSString stringWithUTF8String:version] : @"dev";
+    NSString *nsBuildCommit = (buildCommit && strlen(buildCommit) > 0) ? [NSString stringWithUTF8String:buildCommit] : @"dev";
+
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Handle nil/empty strings safely
-        NSString *nsVersion = (version && strlen(version) > 0) ? [NSString stringWithUTF8String:version] : @"dev";
-        NSString *nsBuildCommit = (buildCommit && strlen(buildCommit) > 0) ? [NSString stringWithUTF8String:buildCommit] : @"dev";
 
         // Create the about window
         NSWindow *aboutWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 360, 320)
@@ -61,7 +62,7 @@ void showAboutDialog(const char *version, const char *buildCommit) {
 
         // Version
         NSTextField *versionLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 140, 320, 20)];
-        NSString *versionText = [NSString stringWithFormat:@"Version %@", nsVersion];
+        NSString *versionText = [NSString stringWithFormat:@"%@", nsVersion];
         [versionLabel setStringValue:versionText];
         [versionLabel setFont:[NSFont systemFontOfSize:11]];
         [versionLabel setTextColor:[NSColor tertiaryLabelColor]];
@@ -74,7 +75,7 @@ void showAboutDialog(const char *version, const char *buildCommit) {
 
         // Build/Commit
         NSTextField *buildLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 120, 320, 20)];
-        NSString *buildText = [NSString stringWithFormat:@"Build: %@", nsBuildCommit];
+        NSString *buildText = [NSString stringWithFormat:@"(%@)", nsBuildCommit];
         [buildLabel setStringValue:buildText];
         [buildLabel setFont:[NSFont monospacedSystemFontOfSize:10 weight:NSFontWeightRegular]];
         [buildLabel setTextColor:[NSColor tertiaryLabelColor]];
@@ -154,19 +155,11 @@ import (
 
 func showAbout() {
 	cVersion := C.CString(version)
-	cBuildCommit := C.CString(getBuildCommit())
+	cBuildCommit := C.CString(buildCommit)
 	defer C.free(unsafe.Pointer(cVersion))
 	defer C.free(unsafe.Pointer(cBuildCommit))
 
 	C.showAboutDialog(cVersion, cBuildCommit)
-}
-
-func getBuildCommit() string {
-	// Extract commit from version if it contains it, otherwise return version
-	if len(version) >= 7 {
-		return version[:7]
-	}
-	return version
 }
 
 // showUninstallConfirmation shows a native confirmation dialog for uninstall

@@ -44,8 +44,9 @@ const (
 
 // Build variables set by ldflags
 var (
-	version   = "dev"
-	buildTime = ""
+	version     = "dev"
+	buildCommit = "dev"
+	buildTime   = ""
 )
 
 var (

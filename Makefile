@@ -6,8 +6,9 @@ BINARY_MENUBAR = cassh-menubar
 BINARY_CLI = cassh
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 BUILD_TIME = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS = -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
+LDFLAGS = -ldflags "-X main.version=$(VERSION) -X main.buildCommit=$(BUILD_COMMIT) -X main.buildTime=$(BUILD_TIME)"
 
 # Directories
 BUILD_DIR = build
