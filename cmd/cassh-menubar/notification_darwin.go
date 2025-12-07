@@ -154,6 +154,62 @@ void sendNativeNotificationWithCategory(const char *title, const char *body, con
 void sendNativeNotification(const char *title, const char *body) {
     sendNativeNotificationWithCategory(title, body, "GENERAL");
 }
+
+// Share picker delegate to handle cleanup
+@interface SharePickerDelegate : NSObject <NSSharingServicePickerDelegate>
+@property (strong) NSWindow *anchorWindow;
+@end
+
+@implementation SharePickerDelegate
+- (void)sharingServicePicker:(NSSharingServicePicker *)sharingServicePicker didChooseSharingService:(NSSharingService *)service {
+    // User chose a service or dismissed the picker
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        if (self.anchorWindow) {
+            [self.anchorWindow close];
+            self.anchorWindow = nil;
+        }
+    });
+}
+@end
+
+static SharePickerDelegate *shareDelegate = nil;
+
+void showNativeShareSheet(const char* urlStr, const char* text) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *shareText = [NSString stringWithUTF8String:text];
+        NSURL *shareURL = [NSURL URLWithString:[NSString stringWithUTF8String:urlStr]];
+
+        NSArray *items = @[shareText, shareURL];
+
+        NSSharingServicePicker *picker = [[NSSharingServicePicker alloc] initWithItems:items];
+
+        // Get the mouse location to position the picker
+        NSPoint mouseLoc = [NSEvent mouseLocation];
+
+        // Create a small invisible window at the mouse location to anchor the picker
+        NSRect frame = NSMakeRect(mouseLoc.x - 1, mouseLoc.y - 1, 2, 2);
+        NSWindow *anchorWindow = [[NSWindow alloc] initWithContentRect:frame
+                                                             styleMask:NSWindowStyleMaskBorderless
+                                                               backing:NSBackingStoreBuffered
+                                                                 defer:NO];
+        [anchorWindow setLevel:NSPopUpMenuWindowLevel];
+        [anchorWindow setBackgroundColor:[NSColor clearColor]];
+        [anchorWindow setOpaque:NO];
+        [anchorWindow makeKeyAndOrderFront:nil];
+
+        // Set up delegate to clean up anchor window when picker is dismissed
+        if (shareDelegate == nil) {
+            shareDelegate = [[SharePickerDelegate alloc] init];
+        }
+        shareDelegate.anchorWindow = anchorWindow;
+        picker.delegate = shareDelegate;
+
+        // Show the picker
+        [picker showRelativeToRect:NSMakeRect(0, 0, 2, 2)
+                            ofView:anchorWindow.contentView
+                     preferredEdge:NSRectEdgeMinY];
+    });
+}
 */
 import "C"
 import (
@@ -215,4 +271,17 @@ func sendNotificationWithCategory(title, body, category string) {
 	defer C.free(unsafe.Pointer(cCategory))
 
 	C.sendNativeNotificationWithCategory(cTitle, cBody, cCategory)
+}
+
+// showShareSheet shows the native macOS share sheet with the cassh URL
+func showShareSheet() {
+	shareURL := "https://github.com/shawntz/cassh"
+	shareText := "Check out cassh - SSH Key & Certificate Manager for GitHub! Ephemeral SSH certificates for enterprise, automatic key rotation for personal accounts."
+
+	cURL := C.CString(shareURL)
+	cText := C.CString(shareText)
+	defer C.free(unsafe.Pointer(cURL))
+	defer C.free(unsafe.Pointer(cText))
+
+	C.showNativeShareSheet(cURL, cText)
 }
