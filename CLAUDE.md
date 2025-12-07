@@ -111,9 +111,10 @@ cp ~/Library/Application\ Support/cassh/config.toml ~/.config/cassh/config.toml
 
 - `cassh.policy.toml` - Template policy config (fill in before enterprise build)
 - `internal/config/config.go` - `LoadServerConfig()` loads config with env var overrides
-- `internal/ca/ca.go` - `SignPublicKey()` - certificate signing logic
+- `internal/ca/ca.go` - `SignPublicKeyForGitHub()` - certificate signing with `login@HOSTNAME` extension
 - `internal/oidc/oidc.go` - `StartAuth()` / `HandleCallback()` - Entra OIDC flow
-- `cmd/cassh-menubar/main.go` - Menu bar app with loopback listener
+- `cmd/cassh-menubar/main.go` - Menu bar app with loopback listener and URL scheme handler
+- `cmd/cassh-menubar/urlhandler_darwin.go` - `cassh://` URL scheme handling for certificate installation
 
 ## Environment Variables
 
@@ -148,24 +149,75 @@ cp ~/Library/Application\ Support/cassh/config.toml ~/.config/cassh/config.toml
 ### Enterprise Flow (SSH Certificates)
 
 1. User clicks terminal icon in menu bar, selects enterprise connection
-2. Menubar ensures `~/.ssh/cassh_id_ed25519` exists, reads pubkey
-3. Opens browser to `https://cassh.example.com/?pubkey=<pubkey>`
+2. Menubar ensures `~/.ssh/cassh_{connection}_id_ed25519` exists, reads pubkey
+3. Opens browser to `https://cassh.example.com/?pubkey=<pubkey>&connection=<id>`
 4. Landing page shows LSP or Sloth meme with SSO button
 5. User clicks SSO → Entra OIDC flow
-6. On callback, server signs cert with CA
-7. Browser can POST cert to loopback listener for auto-install
-8. Menubar writes cert to `~/.ssh/cassh_id_ed25519-cert.pub`, runs `ssh-add`
-9. Dropdown menu shows green status indicator
+6. On callback, server signs cert with CA (includes `login@HOSTNAME=username` extension)
+7. Browser redirects to `cassh://install-cert?cert=<base64>` URL scheme
+8. Menubar receives URL, decodes cert, writes to `~/.ssh/cassh_{connection}_id_ed25519-cert.pub`
+9. Runs `ssh-add`, dropdown menu shows green status indicator
 
 ### Personal Flow (SSH Keys via gh CLI)
 
 1. User launches app → Setup wizard opens (first run)
 2. User selects "Personal GitHub.com" and enters GitHub username
-3. Menubar generates Ed25519 SSH key (`~/.ssh/cassh_personal_<username>`)
+3. Menubar generates Ed25519 SSH key (`~/.ssh/cassh_personal_{id}_id_ed25519`)
 4. Key is uploaded to GitHub via `gh ssh-key add`
 5. `~/.ssh/config` is automatically configured for GitHub.com
 6. Key age is tracked; rotation happens per user-selected policy
 7. On rotation: old key deleted from GitHub, new key generated and uploaded
+
+### Enterprise Setup Flow
+
+1. User clicks "Add Enterprise Connection" in setup wizard
+2. User pastes any SSH clone URL from their GitHub Enterprise (e.g., `user_123@github.company.com:org/repo.git`)
+3. JavaScript parses URL to extract: hostname (`github.company.com`) and SSH username (`user_123`)
+4. User enters cassh server URL and optional git identity (name/email)
+5. Connection is saved with SCIM-provisioned username
+6. SSH config is created with correct `User` field (not `git`, but actual SCIM username)
+7. Git config `includeIf` is added to `~/.gitconfig` if git identity was provided
+
+## Git Config Management
+
+cassh manages per-connection git identities using Git's `includeIf` directive:
+
+**Per-connection config files** (stored in `~/.config/cassh/`):
+```
+gitconfig-enterprise-1733525000
+gitconfig-personal-1733526000
+```
+
+Each contains:
+```ini
+# Git config for Work GitHub (github.company.com)
+[user]
+    name = John Doe
+    email = john.doe@company.com
+```
+
+**Conditional includes** added to `~/.gitconfig`:
+```ini
+# cassh: Include config for Work GitHub
+[includeIf "hasconfig:remote.*.url:user_123@github.company.com:**"]
+    path = /Users/john/.config/cassh/gitconfig-enterprise-1733525000
+
+# cassh: Include config for Personal GitHub
+[includeIf "hasconfig:remote.*.url:git@github.com:**"]
+    path = /Users/john/.config/cassh/gitconfig-personal-1733526000
+```
+
+Git automatically applies the correct identity based on the repo's remote URL.
+
+## URL Scheme
+
+cassh registers the `cassh://` URL scheme for certificate installation:
+
+- **Scheme**: `cassh://install-cert?cert=<base64-encoded-cert>&connection=<id>`
+- **Handler**: `cmd/cassh-menubar/urlhandler_darwin.go`
+- **Registration**: `CFBundleURLTypes` in `Info.plist.template`
+
+This bypasses browser mixed-content restrictions when the cassh server runs on HTTPS.
 
 ## Static Assets
 
