@@ -2093,7 +2093,7 @@ func generateSSHKeyForPersonal(conn *config.Connection) error {
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
 
-	if err := os.WriteFile(keyPath, privKeyPEM.Bytes, 0600); err != nil {
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(privKeyPEM), 0600); err != nil {
 		return fmt.Errorf("failed to write private key: %w", err)
 	}
 
