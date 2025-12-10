@@ -192,9 +192,9 @@ func pollNotificationActions() {
 		switch action {
 		case 1: // renew
 			// Open the first enterprise connection for renewal
-			for _, conn := range cfg.User.Connections {
+			for i, conn := range cfg.User.Connections {
 				if conn.Type == "enterprise" {
-					handleConnectionAction(conn.ID)
+					handleConnectionAction(conn.ID, i)
 					break
 				}
 			}
