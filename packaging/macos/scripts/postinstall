@@ -6,9 +6,16 @@ set -e
 
 APP_PATH="/Applications/cassh.app"
 POLICY_PATH="$APP_PATH/Contents/Resources/cassh.policy.toml"
+
+# Main app LaunchAgent (keeps app running)
 LAUNCH_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawnschwartz.cassh.plist"
 LAUNCH_AGENT_DST="/Library/LaunchAgents/com.shawnschwartz.cassh.plist"
 LABEL="com.shawnschwartz.cassh"
+
+# Key rotation LaunchAgent (runs hourly in background)
+ROTATE_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawnschwartz.cassh.rotate.plist"
+ROTATE_AGENT_DST="/Library/LaunchAgents/com.shawnschwartz.cassh.rotate.plist"
+ROTATE_LABEL="com.shawnschwartz.cassh.rotate"
 
 # Make policy file immutable
 if [ -f "$POLICY_PATH" ]; then
@@ -16,11 +23,18 @@ if [ -f "$POLICY_PATH" ]; then
   chflags uchg "$POLICY_PATH" 2>/dev/null || true
 fi
 
-# Install LaunchAgent for all users (requires admin)
+# Install main app LaunchAgent for all users (requires admin)
 if [ -f "$LAUNCH_AGENT_SRC" ]; then
   cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST"
   chmod 644 "$LAUNCH_AGENT_DST"
   chown root:wheel "$LAUNCH_AGENT_DST"
+fi
+
+# Install key rotation LaunchAgent for all users
+if [ -f "$ROTATE_AGENT_SRC" ]; then
+  cp "$ROTATE_AGENT_SRC" "$ROTATE_AGENT_DST"
+  chmod 644 "$ROTATE_AGENT_DST"
+  chown root:wheel "$ROTATE_AGENT_DST"
 fi
 
 # Get current console user
@@ -32,14 +46,23 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1
 
-  # Unload old LaunchAgent if exists (ignore errors)
+  # Unload old LaunchAgents if exist (ignore errors)
   sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null || true
   launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null || true
+  sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null || true
+  launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null || true
 
-  # Load LaunchAgent for current user using modern launchctl
+  # Load main app LaunchAgent for current user using modern launchctl
   # Try bootstrap first (modern), fall back to load (legacy)
   if ! launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENT_DST" 2>/dev/null; then
     sudo -u "$CONSOLE_USER" launchctl load "$LAUNCH_AGENT_DST" 2>/dev/null || true
+  fi
+
+  # Load key rotation LaunchAgent
+  if [ -f "$ROTATE_AGENT_DST" ]; then
+    if ! launchctl bootstrap "gui/$CONSOLE_UID" "$ROTATE_AGENT_DST" 2>/dev/null; then
+      sudo -u "$CONSOLE_USER" launchctl load "$ROTATE_AGENT_DST" 2>/dev/null || true
+    fi
   fi
 
   # Start the app immediately
