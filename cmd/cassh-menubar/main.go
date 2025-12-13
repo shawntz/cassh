@@ -2200,7 +2200,7 @@ func findGitHubKeyIDByTitle(title string) string {
 		// Extract connection ID from new title format (cassh-{connID}@{hostname})
 		withoutPrefix := strings.TrimPrefix(title, "cassh-")
 		parts := strings.Split(withoutPrefix, "@")
-		if len(parts) > 0 {
+		if len(parts) > 0 && parts[0] != "" {
 			connID := parts[0]
 			legacyTitle = getLegacyKeyTitle(connID)
 		}
@@ -2214,14 +2214,15 @@ func findGitHubKeyIDByTitle(title string) string {
 		fields := strings.Fields(line)
 		if len(fields) >= 5 {
 			keyTitle := fields[0]
+			keyID := fields[len(fields)-2] // Key ID is the second-to-last field
 			// Check for exact match with new title format
 			if keyTitle == title {
-				return fields[len(fields)-2]
+				return keyID
 			}
 			// Check for exact match with legacy title format (if applicable)
 			if legacyTitle != "" && keyTitle == legacyTitle {
 				log.Printf("Found key with legacy title format: %s", legacyTitle)
-				return fields[len(fields)-2]
+				return keyID
 			}
 		}
 	}
