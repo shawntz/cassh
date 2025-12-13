@@ -19,10 +19,6 @@
     <key>RunAtLoad</key>
     <true/>
 
-    <!-- Don't run if already running -->
-    <key>LaunchOnlyOnce</key>
-    <false/>
-
     <!-- Low priority background task -->
     <key>ProcessType</key>
     <string>Background</string>
