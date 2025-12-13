@@ -276,8 +276,14 @@ func buildConnectionMenu() {
 		}
 		actionItem := systray.AddMenuItem(fmt.Sprintf("  %s", actionText), fmt.Sprintf("Generate/renew for %s", conn.Name))
 
-		// Add revoke item for this connection (starts disabled until cert is verified)
-		revokeItem := systray.AddMenuItem("  Revoke Certificate", fmt.Sprintf("Revoke certificate for %s", conn.Name))
+		// Add revoke item for this connection (starts disabled until cert/key is verified)
+		revokeText := "Revoke Certificate"
+		revokeTooltip := fmt.Sprintf("Revoke certificate for %s", conn.Name)
+		if conn.Type == config.ConnectionTypePersonal {
+			revokeText = "Revoke Key"
+			revokeTooltip = fmt.Sprintf("Revoke SSH key for %s", conn.Name)
+		}
+		revokeItem := systray.AddMenuItem(fmt.Sprintf("  %s", revokeText), revokeTooltip)
 		revokeItem.Disable() // Disabled by default, enabled when cert is active
 		menuRevokeItems = append(menuRevokeItems, revokeItem)
 
@@ -286,7 +292,7 @@ func buildConnectionMenu() {
 		connIdx := i
 		go func() {
 			for range actionItem.ClickedCh {
-				handleConnectionAction(connID)
+				handleConnectionAction(connID, connIdx)
 			}
 		}()
 		go func() {
@@ -390,7 +396,7 @@ func openSetupWizard() {
 }
 
 // handleConnectionAction handles the action for a specific connection
-func handleConnectionAction(connID string) {
+func handleConnectionAction(connID string, connIdx int) {
 	conn := cfg.User.GetConnection(connID)
 	if conn == nil {
 		log.Printf("Connection not found: %s", connID)
@@ -400,11 +406,11 @@ func handleConnectionAction(connID string) {
 	if conn.Type == config.ConnectionTypeEnterprise {
 		generateCertForConnection(conn)
 	} else {
-		refreshKeyForConnection(conn)
+		refreshKeyForConnection(conn, connIdx)
 	}
 }
 
-// revokeConnectionCert revokes the certificate for a connection
+// revokeConnectionCert revokes the certificate/key for a connection
 func revokeConnectionCert(connID string, connIdx int) {
 	conn := cfg.User.GetConnection(connID)
 	if conn == nil {
@@ -412,6 +418,81 @@ func revokeConnectionCert(connID string, connIdx int) {
 		return
 	}
 
+	if conn.Type == config.ConnectionTypePersonal {
+		revokePersonalKey(conn, connIdx)
+	} else {
+		revokeEnterpriseCert(conn, connIdx)
+	}
+}
+
+// revokePersonalKey revokes an SSH key for a personal GitHub connection
+func revokePersonalKey(conn *config.Connection, connIdx int) {
+	log.Printf("Revoking SSH key for personal connection: %s", conn.Name)
+
+	// Remove key from ssh-agent first
+	if conn.SSHKeyPath != "" {
+		if err := exec.Command("ssh-add", "-d", conn.SSHKeyPath).Run(); err != nil {
+			log.Printf("Note: Could not remove key from ssh-agent: %v", err)
+		} else {
+			log.Printf("Removed key from ssh-agent: %s", conn.SSHKeyPath)
+		}
+	}
+
+	// Delete key from GitHub
+	keyID := conn.GitHubKeyID
+	if keyID == "" {
+		// Try to find by title if ID not stored (legacy config)
+		// Try new format with hostname first, then legacy format
+		keyTitle := getKeyTitle(conn.ID)
+		keyID = findGitHubKeyIDByTitle(keyTitle)
+		if keyID != "" {
+			log.Printf("Found GitHub key ID by title: %s -> %s", keyTitle, keyID)
+		} else {
+			// Try legacy format without hostname
+			legacyTitle := getLegacyKeyTitle(conn.ID)
+			keyID = findGitHubKeyIDByTitle(legacyTitle)
+			if keyID != "" {
+				log.Printf("Found GitHub key ID by legacy title: %s -> %s", legacyTitle, keyID)
+			}
+		}
+	}
+	if keyID != "" {
+		if err := deleteSSHKeyFromGitHub(keyID); err != nil {
+			log.Printf("Error deleting key from GitHub: %v", err)
+		} else {
+			log.Printf("Deleted key from GitHub: %s", keyID)
+		}
+	} else {
+		log.Printf("No GitHub key ID found, skipping GitHub deletion")
+	}
+
+	// Delete local key files
+	if conn.SSHKeyPath != "" {
+		os.Remove(conn.SSHKeyPath)
+		os.Remove(conn.SSHKeyPath + ".pub")
+		log.Printf("Removed local key files: %s", conn.SSHKeyPath)
+	}
+
+	// Clear the GitHub key ID and key created time from config
+	conn.GitHubKeyID = ""
+	conn.KeyCreatedAt = 0
+	if err := config.SaveUserConfig(&cfg.User); err != nil {
+		log.Printf("Error saving config: %v", err)
+	}
+
+	// Update the menu status
+	updateConnectionStatus(connIdx)
+
+	log.Printf("SSH key revoked for connection: %s", conn.Name)
+
+	// Send notification
+	sendNotification("SSH Key Revoked",
+		fmt.Sprintf("%s SSH key has been revoked and deleted from GitHub.", conn.Name),
+		false)
+}
+
+// revokeEnterpriseCert revokes the certificate for an enterprise connection
+func revokeEnterpriseCert(conn *config.Connection, connIdx int) {
 	log.Printf("Revoking certificate for connection: %s", conn.Name)
 
 	// Remove key from ssh-agent first
@@ -424,7 +505,7 @@ func revokeConnectionCert(connID string, connIdx int) {
 	}
 
 	// Remove certificate file
-	if conn.Type == config.ConnectionTypeEnterprise && conn.SSHCertPath != "" {
+	if conn.SSHCertPath != "" {
 		if err := os.Remove(conn.SSHCertPath); err != nil {
 			if !os.IsNotExist(err) {
 				log.Printf("Error removing certificate: %v", err)
@@ -478,7 +559,7 @@ func generateCertForConnection(conn *config.Connection) {
 }
 
 // refreshKeyForConnection handles key refresh for personal GitHub connection
-func refreshKeyForConnection(conn *config.Connection) {
+func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 	// Check if gh CLI is authenticated
 	ghStatus := checkGHAuth()
 	if !ghStatus.Installed {
@@ -494,6 +575,7 @@ func refreshKeyForConnection(conn *config.Connection) {
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
+		updateConnectionStatus(connIdx)
 		return
 	}
 
@@ -501,6 +583,9 @@ func refreshKeyForConnection(conn *config.Connection) {
 	if err := config.SaveUserConfig(&cfg.User); err != nil {
 		log.Printf("Failed to save config after key rotation: %v", err)
 	}
+
+	// Update UI immediately
+	updateConnectionStatus(connIdx)
 
 	sendNotification("cassh", fmt.Sprintf("SSH key rotated for %s", conn.Name), false)
 	log.Printf("Rotated SSH key for: %s", conn.Name)
@@ -2093,7 +2178,7 @@ func generateSSHKeyForPersonal(conn *config.Connection) error {
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
 
-	if err := os.WriteFile(keyPath, privKeyPEM.Bytes, 0600); err != nil {
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(privKeyPEM), 0600); err != nil {
 		return fmt.Errorf("failed to write private key: %w", err)
 	}
 
