@@ -2200,7 +2200,7 @@ func findGitHubKeyIDByTitle(title string) string {
 		// Extract connection ID from new title format (cassh-{connID}@{hostname})
 		withoutPrefix := strings.TrimPrefix(title, "cassh-")
 		parts := strings.Split(withoutPrefix, "@")
-		if len(parts) > 0 && parts[0] != "" {
+		if len(parts) >= 2 && parts[0] != "" {
 			connID := parts[0]
 			legacyTitle = getLegacyKeyTitle(connID)
 		}
@@ -2284,7 +2284,7 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 			log.Printf("Warning: failed to delete old key: %v", err)
 			// Continue anyway - we still want to generate a new key
 		}
-	} else {
+	} else if conn.ID != "" {
 		// No stored key ID - try to find and delete using both new and legacy title formats
 		// This handles migration from older versions
 		keyTitle := getKeyTitle(conn.ID)
