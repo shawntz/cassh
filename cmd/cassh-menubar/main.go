@@ -2199,12 +2199,11 @@ func findGitHubKeyIDByTitle(title string) string {
 	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if strings.Contains(line, title) {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				// Key ID is the second-to-last field (last is "authentication" or "signing")
-				return fields[len(fields)-2]
-			}
+		fields := strings.Fields(line)
+		// Check if the first field (title) exactly matches
+		if len(fields) >= 6 && fields[0] == title {
+			// Key ID is the second-to-last field (last is "authentication" or "signing")
+			return fields[len(fields)-2]
 		}
 	}
 	return ""
