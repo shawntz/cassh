@@ -79,6 +79,19 @@ type ConnectionStatus struct {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	// Check for headless mode flags
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--rotate-keys":
+			runHeadlessKeyRotation()
+			return
+		case "--version":
+			fmt.Printf("cassh %s (commit %s)\n", version, buildCommit)
+			return
+		}
+	}
+
 	log.Println("Starting cassh-menubar...")
 
 	// Initialize native notifications (request permission)
@@ -1299,16 +1312,21 @@ func uninstallCassh() {
 		removeGitConfigForConnection(&conn)
 	}
 
-	// 2. Unregister from login items (SMAppService) and remove LaunchAgent
+	// 2. Unregister from login items (SMAppService) and remove LaunchAgents
 	unregisterAsLoginItem()
-	// Remove user-level LaunchAgent
+	// Remove user-level LaunchAgents
 	userLaunchAgentPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.shawnschwartz.cassh.plist")
 	exec.Command("launchctl", "unload", userLaunchAgentPath).Run()
 	os.Remove(userLaunchAgentPath)
-	// Remove system-level LaunchAgent (installed by PKG)
+	userRotateAgentPath := filepath.Join(homeDir, "Library", "LaunchAgents", "com.shawnschwartz.cassh.rotate.plist")
+	exec.Command("launchctl", "unload", userRotateAgentPath).Run()
+	os.Remove(userRotateAgentPath)
+	// Remove system-level LaunchAgents (installed by PKG)
 	systemLaunchAgentPath := "/Library/LaunchAgents/com.shawnschwartz.cassh.plist"
 	exec.Command("launchctl", "unload", systemLaunchAgentPath).Run()
-	// System LaunchAgent requires admin to remove - will be handled by the uninstall script
+	systemRotateAgentPath := "/Library/LaunchAgents/com.shawnschwartz.cassh.rotate.plist"
+	exec.Command("launchctl", "unload", systemRotateAgentPath).Run()
+	// System LaunchAgents require admin to remove - will be handled by the uninstall script
 
 	// 3. Remove Application Support directory (contains user config)
 	appSupportDir := filepath.Join(homeDir, "Library", "Application Support", "cassh")
@@ -1349,7 +1367,7 @@ LAUNCH_AGENT='/Library/LaunchAgents/com.shawnschwartz.cassh.plist'
 
 # Create AppleScript to run with admin privileges
 cat > /tmp/cassh_uninstall.scpt << 'APPLESCRIPT'
-do shell script "rm -rf '/Applications/cassh.app' '/Library/LaunchAgents/com.shawnschwartz.cassh.plist' 2>/dev/null || true" with prompt "cassh needs to remove the application." with administrator privileges
+do shell script "rm -rf '/Applications/cassh.app' '/Library/LaunchAgents/com.shawnschwartz.cassh.plist' '/Library/LaunchAgents/com.shawnschwartz.cassh.rotate.plist' 2>/dev/null || true" with prompt "cassh needs to remove the application." with administrator privileges
 APPLESCRIPT
 
 if osascript /tmp/cassh_uninstall.scpt 2>/dev/null; then
@@ -1364,12 +1382,13 @@ rm -f /tmp/cassh_uninstall.scpt
 rm -f "$0"
 `, appPath)
 	} else if appPath != "" {
-		// Can delete app without admin privileges, but still try to remove system LaunchAgent
+		// Can delete app without admin privileges, but still try to remove system LaunchAgents
 		uninstallScript = fmt.Sprintf(`#!/bin/bash
 sleep 2
 rm -rf '%s'
-# Try to remove system LaunchAgent (may fail without admin)
+# Try to remove system LaunchAgents (may fail without admin)
 rm -f /Library/LaunchAgents/com.shawnschwartz.cassh.plist 2>/dev/null || true
+rm -f /Library/LaunchAgents/com.shawnschwartz.cassh.rotate.plist 2>/dev/null || true
 osascript -e 'display notification "cassh has been uninstalled" with title "Uninstall Complete"'
 rm -f "$0"
 `, appPath)
@@ -2198,6 +2217,28 @@ func generateSSHKeyForPersonal(conn *config.Connection) error {
 	return nil
 }
 
+// getKeyTitle generates a unique SSH key title for GitHub
+// Format: cassh-{connID}@{hostname} (e.g., cassh-personal-123@MacBook-Pro)
+func getKeyTitle(connID string) string {
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		hostname = "unknown"
+	}
+	// Clean hostname - replace dots with dashes for cleaner display
+	hostname = strings.ReplaceAll(hostname, ".", "-")
+	// Truncate long hostnames
+	if len(hostname) > 30 {
+		hostname = hostname[:30]
+	}
+	return fmt.Sprintf("cassh-%s@%s", connID, hostname)
+}
+
+// getLegacyKeyTitle returns the old key title format without hostname
+// Used for backwards compatibility when looking up existing keys
+func getLegacyKeyTitle(connID string) string {
+	return fmt.Sprintf("cassh-%s", connID)
+}
+
 // uploadSSHKeyToGitHub uploads an SSH public key to GitHub using gh CLI
 // Returns the GitHub key ID for later deletion
 func uploadSSHKeyToGitHub(keyPath string, title string) (string, error) {
@@ -2239,14 +2280,15 @@ func findGitHubKeyIDByTitle(title string) string {
 	}
 
 	// Parse output to find our key
-	// Format: "TITLE    TYPE    ADDED    KEY_ID"
+	// Format: "TITLE    TYPE    KEY    ADDED    KEY_ID    KEY_TYPE"
+	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, title) {
 			fields := strings.Fields(line)
-			if len(fields) >= 4 {
-				// Key ID is typically the last field
-				return fields[len(fields)-1]
+			if len(fields) >= 5 {
+				// Key ID is the second-to-last field (last is "authentication" or "signing")
+				return fields[len(fields)-2]
 			}
 		}
 	}
@@ -2283,7 +2325,7 @@ func setupPersonalGitHubSSH(conn *config.Connection) error {
 	}
 
 	// 2. Upload to GitHub
-	keyTitle := fmt.Sprintf("cassh-%s", conn.ID)
+	keyTitle := getKeyTitle(conn.ID)
 	keyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
 	if err != nil {
 		return fmt.Errorf("key upload failed: %w", err)
@@ -2319,7 +2361,7 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 	}
 
 	// 4. Upload new key to GitHub
-	keyTitle := fmt.Sprintf("cassh-%s", conn.ID)
+	keyTitle := getKeyTitle(conn.ID)
 	keyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
 	if err != nil {
 		return fmt.Errorf("key upload failed: %w", err)
@@ -2394,6 +2436,68 @@ func checkAndRotateExpiredKeys() {
 			}
 		}
 	}
+}
+
+// runHeadlessKeyRotation runs key rotation without starting the GUI
+// This is called when the app is launched with --rotate-keys flag
+// Used by the LaunchAgent for background key rotation
+func runHeadlessKeyRotation() {
+	log.Println("Running headless key rotation...")
+
+	// Load config
+	userCfg, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Could not load user config: %v", err)
+		os.Exit(1)
+	}
+
+	if len(userCfg.Connections) == 0 {
+		log.Println("No connections configured, nothing to rotate")
+		os.Exit(0)
+	}
+
+	// Check if gh CLI is available
+	ghStatus := checkGHAuth()
+	if !ghStatus.Installed {
+		log.Println("GitHub CLI (gh) not installed, cannot rotate keys")
+		os.Exit(1)
+	}
+	if !ghStatus.Authenticated {
+		log.Println("GitHub CLI not authenticated, cannot rotate keys")
+		os.Exit(1)
+	}
+
+	rotatedCount := 0
+	for i := range userCfg.Connections {
+		conn := &userCfg.Connections[i]
+		if needsKeyRotation(conn) {
+			log.Printf("Key rotation needed for %s (age: %v, policy: %dh)",
+				conn.Name,
+				time.Since(time.Unix(conn.KeyCreatedAt, 0)).Round(time.Hour),
+				conn.KeyRotationHours)
+
+			if err := rotatePersonalGitHubSSH(conn); err != nil {
+				log.Printf("Failed to rotate key for %s: %v", conn.Name, err)
+				continue
+			}
+
+			rotatedCount++
+			log.Printf("Successfully rotated key for %s", conn.Name)
+		}
+	}
+
+	// Save config if any keys were rotated
+	if rotatedCount > 0 {
+		if err := config.SaveUserConfig(userCfg); err != nil {
+			log.Printf("Failed to save config: %v", err)
+			os.Exit(1)
+		}
+		log.Printf("Rotated %d key(s)", rotatedCount)
+	} else {
+		log.Println("No keys needed rotation")
+	}
+
+	os.Exit(0)
 }
 
 // scheduleRestart restarts the app to rebuild the menu after adding connections

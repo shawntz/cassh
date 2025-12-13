@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shawnschwartz.cassh.rotate</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/cassh.app/Contents/MacOS/cassh</string>
+        <string>--rotate-keys</string>
+    </array>
+
+    <!-- Run every hour -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <!-- Also run shortly after load (30 seconds delay) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Don't run if already running -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+
+    <!-- Low priority background task -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Nice value for low CPU priority -->
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/tmp/cassh-rotate.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/cassh-rotate.log</string>
+</dict>
+</plist>
