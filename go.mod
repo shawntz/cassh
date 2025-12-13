@@ -1,13 +1,13 @@
 module github.com/shawntz/cassh
 
-go 1.22
+go 1.23.0
 
 require (
 	github.com/coreos/go-oidc/v3 v3.10.0
 	github.com/getlantern/systray v1.2.2
 	github.com/pelletier/go-toml/v2 v2.2.2
 	golang.org/x/crypto v0.32.0
-	golang.org/x/oauth2 v0.20.0
+	golang.org/x/oauth2 v0.27.0
 )
 
 require (
