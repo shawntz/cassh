@@ -41,6 +41,12 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
+# Validate username format (alphanumeric, underscore, hyphen only)
+if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+  echo "Error: Invalid console username format" >&2
+  CONSOLE_USER=""
+fi
+
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
   # Create log directory for current user
   # Use dscl to safely get home directory (more secure than sh -c)
