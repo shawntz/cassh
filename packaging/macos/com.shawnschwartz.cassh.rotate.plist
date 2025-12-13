@@ -11,13 +11,9 @@
         <string>--rotate-keys</string>
     </array>
 
-    <!-- Run every hour -->
+    <!-- Run every hour (no immediate execution on load) -->
     <key>StartInterval</key>
     <integer>3600</integer>
-
-    <!-- Also run shortly after load (30 seconds delay) -->
-    <key>RunAtLoad</key>
-    <true/>
 
     <!-- Don't run if already running -->
     <key>LaunchOnlyOnce</key>
