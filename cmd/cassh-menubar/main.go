@@ -2259,10 +2259,21 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 	log.Printf("Rotating SSH key for %s", conn.Name)
 
 	// 1. Delete old key from GitHub
-	if conn.GitHubKeyID != "" {
-		if err := deleteSSHKeyFromGitHub(conn.GitHubKeyID); err != nil {
-			log.Printf("Warning: failed to delete old key: %v", err)
+	keyID := conn.GitHubKeyID
+	if keyID == "" {
+		// Try to find by current title
+		keyID = findGitHubKeyIDByTitle(getKeyTitle(conn.ID))
+		if keyID == "" {
+			// Try to find by legacy title
+			keyID = findGitHubKeyIDByTitle(getLegacyKeyTitle(conn.ID))
+		}
+	}
+	if keyID != "" {
+		if err := deleteSSHKeyFromGitHub(keyID); err != nil {
+			log.Printf("Warning: failed to delete old key (ID: %s): %v", keyID, err)
 			// Continue anyway - we still want to generate a new key
+		} else {
+			log.Printf("Deleted old GitHub SSH key (ID: %s)", keyID)
 		}
 	}
 
@@ -2277,16 +2288,16 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 
 	// 4. Upload new key to GitHub
 	keyTitle := getKeyTitle(conn.ID)
-	keyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
+	newKeyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
 	if err != nil {
 		return fmt.Errorf("key upload failed: %w", err)
 	}
 
 	// 5. Update connection metadata
-	conn.GitHubKeyID = keyID
+	conn.GitHubKeyID = newKeyID
 	conn.KeyCreatedAt = time.Now().Unix()
 
-	log.Printf("SSH key rotated for %s (new key ID: %s)", conn.Name, keyID)
+	log.Printf("SSH key rotated for %s (new key ID: %s)", conn.Name, newKeyID)
 	return nil
 }
 
