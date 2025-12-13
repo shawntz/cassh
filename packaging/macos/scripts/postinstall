@@ -25,16 +25,18 @@ fi
 
 # Install main app LaunchAgent for all users (requires admin)
 if [ -f "$LAUNCH_AGENT_SRC" ]; then
-  cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST" || true
-  chmod 644 "$LAUNCH_AGENT_DST" || true
-  chown root:wheel "$LAUNCH_AGENT_DST" || true
+  if cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST" 2>/dev/null; then
+    chmod 644 "$LAUNCH_AGENT_DST" 2>/dev/null || true
+    chown root:wheel "$LAUNCH_AGENT_DST" 2>/dev/null || true
+  fi
 fi
 
 # Install key rotation LaunchAgent for all users
 if [ -f "$ROTATE_AGENT_SRC" ]; then
-  cp "$ROTATE_AGENT_SRC" "$ROTATE_AGENT_DST" || true
-  chmod 644 "$ROTATE_AGENT_DST" || true
-  chown root:wheel "$ROTATE_AGENT_DST" || true
+  if cp "$ROTATE_AGENT_SRC" "$ROTATE_AGENT_DST" 2>/dev/null; then
+    chmod 644 "$ROTATE_AGENT_DST" 2>/dev/null || true
+    chown root:wheel "$ROTATE_AGENT_DST" 2>/dev/null || true
+  fi
 fi
 
 # Get current console user
