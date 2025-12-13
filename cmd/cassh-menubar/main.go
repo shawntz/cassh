@@ -2195,12 +2195,14 @@ func findGitHubKeyIDByTitle(title string) string {
 	}
 
 	// Prepare legacy title if applicable
+	// Check for new format (cassh-{connID}@{hostname}) vs legacy (cassh-{connID})
 	var legacyTitle string
 	if strings.Contains(title, "@") && strings.HasPrefix(title, "cassh-") {
 		// Extract connection ID from new title format (cassh-{connID}@{hostname})
 		withoutPrefix := strings.TrimPrefix(title, "cassh-")
 		parts := strings.Split(withoutPrefix, "@")
-		if len(parts) >= 2 && parts[0] != "" {
+		// Validate both connection ID and hostname are present
+		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
 			connID := parts[0]
 			legacyTitle = getLegacyKeyTitle(connID)
 		}
@@ -2286,7 +2288,8 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 		}
 	} else if conn.ID != "" {
 		// No stored key ID - try to find and delete using both new and legacy title formats
-		// This handles migration from older versions
+		// This handles migration from older versions where GitHubKeyID wasn't tracked
+		// Defensive check: ensure conn.ID is valid before attempting lookup
 		keyTitle := getKeyTitle(conn.ID)
 		if keyID := findGitHubKeyIDByTitle(keyTitle); keyID != "" {
 			log.Printf("Found existing key on GitHub during rotation (ID: %s)", keyID)
