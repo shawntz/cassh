@@ -17,6 +17,23 @@ ROTATE_AGENT_SRC="$APP_PATH/Contents/Resources/com.shawnschwartz.cassh.rotate.pl
 ROTATE_AGENT_DST="/Library/LaunchAgents/com.shawnschwartz.cassh.rotate.plist"
 ROTATE_LABEL="com.shawnschwartz.cassh.rotate"
 
+# unload_agent - Helper function to unload a LaunchAgent
+# Arguments: $1 = label, $2 = destination path, $3 = console user, $4 = console UID
+unload_agent() {
+  local label="$1"
+  local dst="$2"
+  local user="$3"
+  local uid="$4"
+
+  # Try modern bootout first, then fall back to legacy unload
+  if ! sudo -u "$user" launchctl bootout "gui/$uid/$label" 2>/dev/null; then
+    sudo -u "$user" launchctl unload "$dst" 2>/dev/null || true
+  fi
+  if ! launchctl bootout "gui/$uid/$label" 2>/dev/null; then
+    launchctl unload "$dst" 2>/dev/null || true
+  fi
+}
+
 # Make policy file immutable
 if [ -f "$POLICY_PATH" ]; then
   chmod 444 "$POLICY_PATH"
@@ -25,14 +42,20 @@ fi
 
 # Install main app LaunchAgent for all users (requires admin)
 if [ -f "$LAUNCH_AGENT_SRC" ]; then
-  cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST"
+  cp "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENT_DST" || {
+    echo "Failed to copy main LaunchAgent" >&2
+    exit 1
+  }
   chmod 644 "$LAUNCH_AGENT_DST"
   chown root:wheel "$LAUNCH_AGENT_DST"
 fi
 
 # Install key rotation LaunchAgent for all users
 if [ -f "$ROTATE_AGENT_SRC" ]; then
-  cp "$ROTATE_AGENT_SRC" "$ROTATE_AGENT_DST"
+  cp "$ROTATE_AGENT_SRC" "$ROTATE_AGENT_DST" || {
+    echo "Failed to copy rotation LaunchAgent" >&2
+    exit 1
+  }
   chmod 644 "$ROTATE_AGENT_DST"
   chown root:wheel "$ROTATE_AGENT_DST"
 fi
@@ -47,23 +70,20 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID
   sleep 1
 
   # Unload old LaunchAgents if exist (ignore errors)
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
+  unload_agent "$LABEL" "$LAUNCH_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
+  unload_agent "$ROTATE_LABEL" "$ROTATE_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
 
   # Load main app LaunchAgent for current user using modern launchctl
   # Try bootstrap first (modern), fall back to load (legacy)
   if ! launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENT_DST" 2>/dev/null; then
     sudo -u "$CONSOLE_USER" launchctl load "$LAUNCH_AGENT_DST" 2>/dev/null || true
+  fi
+
+  # Create log directory for rotation agent
+  CONSOLE_HOME=$(eval echo "~$CONSOLE_USER")
+  LOG_DIR="$CONSOLE_HOME/Library/Logs/cassh"
+  if [ ! -d "$LOG_DIR" ]; then
+    sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR" 2>/dev/null || true
   fi
 
   # Load key rotation LaunchAgent
