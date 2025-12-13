@@ -15,14 +15,6 @@
     <key>StartInterval</key>
     <integer>3600</integer>
 
-    <!-- Also run shortly after load (30 seconds delay) -->
-    <key>RunAtLoad</key>
-    <true/>
-
-    <!-- Don't run if already running -->
-    <key>LaunchOnlyOnce</key>
-    <false/>
-
     <!-- Low priority background task -->
     <key>ProcessType</key>
     <string>Background</string>
@@ -33,8 +25,8 @@
 
     <!-- Logging -->
     <key>StandardOutPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>$HOME/Library/Logs/cassh/cassh-rotate.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>$HOME/Library/Logs/cassh/cassh-rotate.log</string>
 </dict>
 </plist>
