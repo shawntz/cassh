@@ -1195,7 +1195,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", minutes)
 }
 
-
 // uninstallCassh removes cassh and all its data from the system
 func uninstallCassh() {
 	// Show confirmation dialog
@@ -2033,8 +2032,8 @@ func findGHBinary() string {
 
 	// Check common Homebrew locations
 	commonPaths := []string{
-		"/opt/homebrew/bin/gh",  // Apple Silicon
-		"/usr/local/bin/gh",     // Intel Mac
+		"/opt/homebrew/bin/gh",              // Apple Silicon
+		"/usr/local/bin/gh",                 // Intel Mac
 		"/home/linuxbrew/.linuxbrew/bin/gh", // Linux Homebrew
 	}
 
@@ -2199,9 +2198,11 @@ func findGitHubKeyIDByTitle(title string) string {
 	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if strings.Contains(line, title) {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 {
+		fields := strings.Fields(line)
+		if len(fields) >= 5 {
+			// Use exact match on the title field (first field) to avoid false positives
+			// e.g., "cassh-personal-123" should not match "cassh-personal-1234"
+			if fields[0] == title {
 				// Key ID is the second-to-last field (last is "authentication" or "signing")
 				return fields[len(fields)-2]
 			}
