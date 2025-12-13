@@ -471,7 +471,8 @@ func acquireFileLock(lockPath string) (*os.File, error) {
 		lockFile.Close()
 
 		// If lock is held by another process, retry
-		if err == syscall.EWOULDBLOCK {
+		// EAGAIN and EWOULDBLOCK are typically the same on Unix systems
+		if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 			time.Sleep(retryDelay)
 			continue
 		}
