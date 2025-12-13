@@ -1195,7 +1195,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", minutes)
 }
 
-
 // uninstallCassh removes cassh and all its data from the system
 func uninstallCassh() {
 	// Show confirmation dialog
@@ -2033,8 +2032,8 @@ func findGHBinary() string {
 
 	// Check common Homebrew locations
 	commonPaths := []string{
-		"/opt/homebrew/bin/gh",  // Apple Silicon
-		"/usr/local/bin/gh",     // Intel Mac
+		"/opt/homebrew/bin/gh",              // Apple Silicon
+		"/usr/local/bin/gh",                 // Intel Mac
 		"/home/linuxbrew/.linuxbrew/bin/gh", // Linux Homebrew
 	}
 
@@ -2186,6 +2185,7 @@ func uploadSSHKeyToGitHub(keyPath string, title string) (string, error) {
 }
 
 // findGitHubKeyIDByTitle finds the GitHub SSH key ID by its title
+// Also checks legacy title format for backward compatibility
 func findGitHubKeyIDByTitle(title string) string {
 	cmd := exec.Command(findGHBinary(), "ssh-key", "list")
 	output, err := cmd.Output()
@@ -2207,6 +2207,32 @@ func findGitHubKeyIDByTitle(title string) string {
 			}
 		}
 	}
+
+	// Try legacy format as fallback (for backward compatibility)
+	// Extract connection ID from new title format (cassh-{connID}@{hostname})
+	if strings.Contains(title, "@") && strings.HasPrefix(title, "cassh-") {
+		// Extract connID: remove "cassh-" prefix and "@hostname" suffix
+		withoutPrefix := strings.TrimPrefix(title, "cassh-")
+		parts := strings.Split(withoutPrefix, "@")
+		if len(parts) > 0 {
+			connID := parts[0]
+			legacyTitle := getLegacyKeyTitle(connID)
+			log.Printf("Trying legacy key title format: %s", legacyTitle)
+			for _, line := range lines {
+				if strings.Contains(line, legacyTitle) {
+					fields := strings.Fields(line)
+					if len(fields) >= 5 {
+						// Verify it's an exact match for the legacy format (not a substring match)
+						if fields[0] == legacyTitle {
+							log.Printf("Found key with legacy title format: %s", legacyTitle)
+							return fields[len(fields)-2]
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return ""
 }
 
@@ -2263,6 +2289,16 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 		if err := deleteSSHKeyFromGitHub(conn.GitHubKeyID); err != nil {
 			log.Printf("Warning: failed to delete old key: %v", err)
 			// Continue anyway - we still want to generate a new key
+		}
+	} else {
+		// No stored key ID - try to find and delete using both new and legacy title formats
+		// This handles migration from older versions
+		keyTitle := getKeyTitle(conn.ID)
+		if keyID := findGitHubKeyIDByTitle(keyTitle); keyID != "" {
+			log.Printf("Found existing key on GitHub during rotation (ID: %s)", keyID)
+			if err := deleteSSHKeyFromGitHub(keyID); err != nil {
+				log.Printf("Warning: failed to delete existing key: %v", err)
+			}
 		}
 	}
 
