@@ -484,10 +484,13 @@ func acquireFileLock(lockPath string) (*os.File, error) {
 }
 
 // releaseFileLock unlocks and closes the lock file
+// Errors are intentionally ignored as they are non-critical:
+// - Unlock errors: advisory lock will be released on process exit
+// - Close errors: file descriptor will be released by OS
 func releaseFileLock(lockFile *os.File) {
 	if lockFile != nil {
-		syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		lockFile.Close()
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
 	}
 }
 
