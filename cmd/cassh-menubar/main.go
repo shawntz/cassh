@@ -2194,41 +2194,34 @@ func findGitHubKeyIDByTitle(title string) string {
 		return ""
 	}
 
+	// Prepare legacy title if applicable
+	var legacyTitle string
+	if strings.Contains(title, "@") && strings.HasPrefix(title, "cassh-") {
+		// Extract connection ID from new title format (cassh-{connID}@{hostname})
+		withoutPrefix := strings.TrimPrefix(title, "cassh-")
+		parts := strings.Split(withoutPrefix, "@")
+		if len(parts) > 0 {
+			connID := parts[0]
+			legacyTitle = getLegacyKeyTitle(connID)
+		}
+	}
+
 	// Parse output to find our key
 	// Format: "TITLE    TYPE    KEY    ADDED    KEY_ID    KEY_TYPE"
 	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if strings.Contains(line, title) {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 {
-				// Key ID is the second-to-last field (last is "authentication" or "signing")
+		fields := strings.Fields(line)
+		if len(fields) >= 5 {
+			keyTitle := fields[0]
+			// Check for exact match with new title format
+			if keyTitle == title {
 				return fields[len(fields)-2]
 			}
-		}
-	}
-
-	// Try legacy format as fallback (for backward compatibility)
-	// Extract connection ID from new title format (cassh-{connID}@{hostname})
-	if strings.Contains(title, "@") && strings.HasPrefix(title, "cassh-") {
-		// Extract connID: remove "cassh-" prefix and "@hostname" suffix
-		withoutPrefix := strings.TrimPrefix(title, "cassh-")
-		parts := strings.Split(withoutPrefix, "@")
-		if len(parts) > 0 {
-			connID := parts[0]
-			legacyTitle := getLegacyKeyTitle(connID)
-			log.Printf("Trying legacy key title format: %s", legacyTitle)
-			for _, line := range lines {
-				if strings.Contains(line, legacyTitle) {
-					fields := strings.Fields(line)
-					if len(fields) >= 5 {
-						// Verify it's an exact match for the legacy format (not a substring match)
-						if fields[0] == legacyTitle {
-							log.Printf("Found key with legacy title format: %s", legacyTitle)
-							return fields[len(fields)-2]
-						}
-					}
-				}
+			// Check for exact match with legacy title format (if applicable)
+			if legacyTitle != "" && keyTitle == legacyTitle {
+				log.Printf("Found key with legacy title format: %s", legacyTitle)
+				return fields[len(fields)-2]
 			}
 		}
 	}
