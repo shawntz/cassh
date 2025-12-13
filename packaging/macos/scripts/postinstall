@@ -42,6 +42,11 @@ CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
+  # Create log directory for current user
+  CONSOLE_HOME=$(sudo -u "$CONSOLE_USER" sh -c 'echo $HOME')
+  LOG_DIR="$CONSOLE_HOME/Library/Logs/cassh"
+  sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR"
+  
   # Kill any existing cassh process
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1
