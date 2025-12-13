@@ -41,7 +41,23 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
+# Validate username format (alphanumeric, underscore, hyphen only)
+if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+  echo "Error: Invalid console username format" >&2
+  CONSOLE_USER=""
+fi
+
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
+  # Create log directory for current user
+  # Use dscl to safely get home directory (more secure than sh -c)
+  CONSOLE_HOME=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+  if [ -n "$CONSOLE_HOME" ] && [ -d "$CONSOLE_HOME" ]; then
+    LOG_DIR="$CONSOLE_HOME/Library/Logs/cassh"
+    if ! sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR" 2>/dev/null; then
+      echo "Warning: Failed to create log directory $LOG_DIR" >&2
+    fi
+  fi
+  
   # Kill any existing cassh process
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1
