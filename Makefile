@@ -29,7 +29,9 @@ POLICY_FILE ?= cassh.policy.example.toml
         icon app-bundle app-bundle-oss app-bundle-enterprise \
         dmg dmg-only pkg pkg-only \
         sign notarize \
-        test lint
+        test test-race test-coverage test-ci test-list \
+        test-ca test-config test-memes test-menubar \
+        lint
 
 # Default: build all binaries
 all: deps build
@@ -270,12 +272,71 @@ uninstall-launchagent:
 # =============================================================================
 # Testing & Linting
 # =============================================================================
-test:
-	go test -v ./...
 
+# Run all tests (cross-platform packages only on Linux, all on macOS)
+test:
+ifeq ($(shell uname),Darwin)
+	@echo "Running all tests (macOS)..."
+	CGO_ENABLED=1 go test -v ./...
+else
+	@echo "Running cross-platform tests (Linux)..."
+	go test -v $$(go list ./... | grep -v /cmd/cassh-menubar)
+endif
+
+# Run tests with race detection (recommended for CI)
+test-race:
+ifeq ($(shell uname),Darwin)
+	@echo "Running all tests with race detection (macOS)..."
+	CGO_ENABLED=1 go test -v -race ./...
+else
+	@echo "Running cross-platform tests with race detection (Linux)..."
+	go test -v -race $$(go list ./... | grep -v /cmd/cassh-menubar)
+endif
+
+# Run tests with coverage report
 test-coverage:
-	go test -coverprofile=coverage.out ./...
+ifeq ($(shell uname),Darwin)
+	@echo "Running all tests with coverage (macOS)..."
+	CGO_ENABLED=1 go test -coverprofile=coverage.out ./...
+else
+	@echo "Running cross-platform tests with coverage (Linux)..."
+	go test -coverprofile=coverage.out $$(go list ./... | grep -v /cmd/cassh-menubar)
+endif
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+# Run specific package tests
+test-ca:
+	@echo "Running CA tests..."
+	go test -v ./internal/ca/...
+
+test-config:
+	@echo "Running config tests..."
+	go test -v ./internal/config/...
+
+test-memes:
+	@echo "Running memes tests..."
+	go test -v ./internal/memes/...
+
+test-menubar:
+	@echo "Running menubar tests (macOS only)..."
+ifeq ($(shell uname),Darwin)
+	CGO_ENABLED=1 go test -v ./cmd/cassh-menubar/...
+else
+	@echo "Skipping: menubar tests require macOS"
+endif
+
+# Full CI-equivalent test suite with race detection and coverage
+test-ci: lint test-race
+	@echo "✅ All CI checks passed"
+
+# List all test files
+test-list:
+	@echo "Test files in codebase:"
+	@find . -name '*_test.go' -type f | sort
+	@echo ""
+	@echo "Test counts by package:"
+	@go test -v ./... 2>/dev/null | grep -c "=== RUN" || echo "Run 'make test' to see test counts"
 
 lint:
 	@if command -v golangci-lint &> /dev/null; then \
