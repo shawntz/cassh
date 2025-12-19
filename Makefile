@@ -1,5 +1,17 @@
 # cassh Makefile
 # Builds both OSS template and enterprise locked distributions
+#
+# Platform Support:
+#   - macOS: Full support (server, CLI, menubar app, all tests)
+#   - Linux: Server and CLI only (menubar requires macOS)
+#   - Windows: Not currently supported (see docs/roadmap.md for Windows plans)
+#
+# Note: This Makefile uses `uname` for platform detection, which is available
+# on macOS and Linux but not on Windows. Windows users should use Go commands
+# directly or build via GitHub Actions.
+
+# Platform detection
+UNAME_S := $(shell uname -s 2>/dev/null || echo "Unknown")
 
 BINARY_SERVER = cassh-server
 BINARY_MENUBAR = cassh-menubar
@@ -275,32 +287,47 @@ uninstall-launchagent:
 
 # Run all tests (cross-platform packages only on Linux, all on macOS)
 test:
-ifeq ($(shell uname),Darwin)
+ifeq ($(UNAME_S),Darwin)
 	@echo "Running all tests (macOS)..."
 	CGO_ENABLED=1 go test -v ./...
-else
+else ifeq ($(UNAME_S),Linux)
 	@echo "Running cross-platform tests (Linux)..."
 	go test -v $$(go list ./... | grep -v /cmd/cassh-menubar)
+else
+	@echo "❌ Error: Unsupported platform '$(UNAME_S)'"
+	@echo "This Makefile supports macOS and Linux only."
+	@echo "For Windows, use: go test ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/..."
+	@exit 1
 endif
 
 # Run tests with race detection (recommended for CI)
 test-race:
-ifeq ($(shell uname),Darwin)
+ifeq ($(UNAME_S),Darwin)
 	@echo "Running all tests with race detection (macOS)..."
 	CGO_ENABLED=1 go test -v -race ./...
-else
+else ifeq ($(UNAME_S),Linux)
 	@echo "Running cross-platform tests with race detection (Linux)..."
 	go test -v -race $$(go list ./... | grep -v /cmd/cassh-menubar)
+else
+	@echo "❌ Error: Unsupported platform '$(UNAME_S)'"
+	@echo "This Makefile supports macOS and Linux only."
+	@echo "For Windows, use: go test -race ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/..."
+	@exit 1
 endif
 
 # Run tests with coverage report
 test-coverage:
-ifeq ($(shell uname),Darwin)
+ifeq ($(UNAME_S),Darwin)
 	@echo "Running all tests with coverage (macOS)..."
 	CGO_ENABLED=1 go test -coverprofile=coverage.out ./...
-else
+else ifeq ($(UNAME_S),Linux)
 	@echo "Running cross-platform tests with coverage (Linux)..."
 	go test -coverprofile=coverage.out $$(go list ./... | grep -v /cmd/cassh-menubar)
+else
+	@echo "❌ Error: Unsupported platform '$(UNAME_S)'"
+	@echo "This Makefile supports macOS and Linux only."
+	@echo "For Windows, use: go test -coverprofile=coverage.out ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/..."
+	@exit 1
 endif
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
@@ -319,11 +346,11 @@ test-memes:
 	go test -v ./internal/memes/...
 
 test-menubar:
+ifeq ($(UNAME_S),Darwin)
 	@echo "Running menubar tests (macOS only)..."
-ifeq ($(shell uname),Darwin)
 	CGO_ENABLED=1 go test -v ./cmd/cassh-menubar/...
 else
-	@echo "Skipping: menubar tests require macOS"
+	@echo "⚠️  Skipping: menubar tests require macOS (current platform: $(UNAME_S))"
 endif
 
 # Full CI-equivalent test suite with race detection and coverage
