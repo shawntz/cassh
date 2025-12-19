@@ -335,8 +335,8 @@ test-list:
 	@echo "Test files in codebase:"
 	@find . -name '*_test.go' -type f | sort
 	@echo ""
-	@echo "Test counts by package:"
-	@go test -v ./... 2>/dev/null | grep -c "=== RUN" || echo "Run 'make test' to see test counts"
+	@echo "Approximate total test functions (from source):"
+	@grep -R --include='*_test.go' -E '^[[:space:]]*func[[:space:]]+Test[[:upper:]][[:alnum:]_]*' . 2>/dev/null | wc -l
 
 lint:
 	@if command -v golangci-lint &> /dev/null; then \
