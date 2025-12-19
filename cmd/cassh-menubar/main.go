@@ -410,10 +410,19 @@ func handleConnectionAction(connID string) {
 		return
 	}
 
+	// Find the connection index for UI updates
+	connIdx := -1
+	for i, c := range cfg.User.Connections {
+		if c.ID == connID {
+			connIdx = i
+			break
+		}
+	}
+
 	if conn.Type == config.ConnectionTypeEnterprise {
 		generateCertForConnection(conn)
 	} else {
-		refreshKeyForConnection(conn)
+		refreshKeyForConnection(conn, connIdx)
 	}
 }
 
@@ -491,7 +500,7 @@ func generateCertForConnection(conn *config.Connection) {
 }
 
 // refreshKeyForConnection handles key refresh for personal GitHub connection
-func refreshKeyForConnection(conn *config.Connection) {
+func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 	// Check if gh CLI is authenticated
 	ghStatus := checkGHAuth()
 	if !ghStatus.Installed {
@@ -507,12 +516,20 @@ func refreshKeyForConnection(conn *config.Connection) {
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
+		if connIdx >= 0 {
+			updateConnectionStatus(connIdx)
+		}
 		return
 	}
 
 	// Save updated connection config with new key ID and timestamp
 	if err := config.SaveUserConfig(&cfg.User); err != nil {
 		log.Printf("Failed to save config after key rotation: %v", err)
+	}
+
+	// Update UI immediately
+	if connIdx >= 0 {
+		updateConnectionStatus(connIdx)
 	}
 
 	sendNotification("cassh", fmt.Sprintf("SSH key rotated for %s", conn.Name), false)
