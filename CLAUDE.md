@@ -276,3 +276,7 @@ The app can run as:
 - **Menu bar + Dock** (regular mode): `NSApplicationActivationPolicyRegular`
 
 User preference saved in `config.toml` as `show_in_dock = true/false`.
+- please also ensure that all tests are easily findable and
+  indexable, and please have a working README.md doc in the
+  directory where tests are stored that is always updated
+  accordingly when new tests are added
