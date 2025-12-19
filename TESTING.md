@@ -176,4 +176,4 @@ When adding new tests:
 ---
 
 *Last updated: 2024-12-10*
-*Test count: 39 tests across 4 packages*
+*Test count: 35 tests across 4 packages*
