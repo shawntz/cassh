@@ -100,6 +100,68 @@ func (ca *CertificateAuthority) SignPublicKeyForGitHub(userPubKey ssh.PublicKey,
 	return cert, nil
 }
 
+// SignPublicKeyForGitLab signs a user's public key with GitLab-specific extensions
+// The gitlabHost should be the GitLab hostname (e.g., "gitlab.yourcompany.com") or empty for gitlab.com
+// The gitlabUsername is the user's GitLab username for the login extension
+func (ca *CertificateAuthority) SignPublicKeyForGitLab(userPubKey ssh.PublicKey, keyID string, gitlabUsername string, gitlabHost string) (*ssh.Certificate, error) {
+	// Generate random serial
+	serialBytes := make([]byte, 8)
+	if _, err := rand.Read(serialBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate serial: %w", err)
+	}
+	serial := binary.BigEndian.Uint64(serialBytes)
+
+	now := time.Now()
+	validAfter := uint64(now.Unix())
+	validBefore := uint64(now.Add(time.Duration(ca.validityHours) * time.Hour).Unix())
+
+	// Determine principals
+	principals := ca.principals
+	if len(principals) == 0 {
+		principals = []string{gitlabUsername}
+	}
+
+	// Build extensions - standard SSH certificate extensions
+	// GitLab supports standard SSH certificates with these extensions
+	// See: https://docs.gitlab.com/ee/user/ssh.html#ssh-certificates
+	extensions := map[string]string{
+		"permit-agent-forwarding": "",
+		"permit-port-forwarding":  "",
+		"permit-pty":              "",
+		"permit-user-rc":          "",
+	}
+
+	// Add the GitLab login extension
+	// Format: login@HOSTNAME=USERNAME
+	// For gitlab.com: login@gitlab.com=username
+	// For GitLab Self-Managed: login@gitlab.yourcompany.com=username
+	if gitlabHost != "" {
+		extensions[fmt.Sprintf("login@%s", gitlabHost)] = gitlabUsername
+	} else {
+		// Default to gitlab.com
+		extensions["login@gitlab.com"] = gitlabUsername
+	}
+
+	cert := &ssh.Certificate{
+		Key:             userPubKey,
+		Serial:          serial,
+		CertType:        ssh.UserCert,
+		KeyId:           keyID,
+		ValidPrincipals: principals,
+		ValidAfter:      validAfter,
+		ValidBefore:     validBefore,
+		Permissions: ssh.Permissions{
+			Extensions: extensions,
+		},
+	}
+
+	if err := cert.SignCert(rand.Reader, ca.signer); err != nil {
+		return nil, fmt.Errorf("failed to sign certificate: %w", err)
+	}
+
+	return cert, nil
+}
+
 // GenerateKeyPair creates a new Ed25519 keypair for the user
 func GenerateKeyPair() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
