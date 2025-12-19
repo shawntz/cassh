@@ -42,15 +42,20 @@ const (
 )
 
 var (
-	menuCheckUpdates *systray.MenuItem
-	latestVersion    string
-	updateStatus     UpdateStatus
+	menuCheckUpdates       *systray.MenuItem
+	menuDismissUpdate      *systray.MenuItem
+	latestVersion          string
+	updateStatus           UpdateStatus
+	lastNotificationTime   time.Time
+	updateNotificationSent bool
 )
 
-// setupUpdateMenu adds the update menu item
-func setupUpdateMenu() *systray.MenuItem {
+// setupUpdateMenu adds the update menu items
+func setupUpdateMenu() (*systray.MenuItem, *systray.MenuItem) {
 	menuCheckUpdates = systray.AddMenuItem("Check for Updates...", "Check for new versions")
-	return menuCheckUpdates
+	menuDismissUpdate = systray.AddMenuItem("  Dismiss Update", "Stop notifications for this version")
+	menuDismissUpdate.Hide() // Hidden by default, shown when update is available
+	return menuCheckUpdates, menuDismissUpdate
 }
 
 // handleUpdateMenuClick handles clicks on the update menu item
@@ -63,6 +68,11 @@ func handleUpdateMenuClick() {
 		// Check for updates
 		go checkForUpdatesWithUI()
 	}
+}
+
+// handleDismissUpdateClick handles clicks on the dismiss update menu item
+func handleDismissUpdateClick() {
+	dismissUpdate()
 }
 
 // checkForUpdatesWithUI checks for updates and shows dialogs
@@ -98,7 +108,10 @@ func checkForUpdatesWithUI() {
 
 	if isNewerVersion(latestVersion, currentVersion) {
 		updateStatus = UpdateStatusAvailable
-		menuCheckUpdates.SetTitle(fmt.Sprintf("Update Available: v%s ↗", latestVersion))
+		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+		if menuDismissUpdate != nil {
+			menuDismissUpdate.Show()
+		}
 		menuCheckUpdates.Enable()
 		log.Printf("Update available: %s -> %s", currentVersion, latestVersion)
 		// Show update available dialog
@@ -108,6 +121,9 @@ func checkForUpdatesWithUI() {
 	} else {
 		updateStatus = UpdateStatusUpToDate
 		menuCheckUpdates.SetTitle("Check for Updates...")
+		if menuDismissUpdate != nil {
+			menuDismissUpdate.Hide()
+		}
 		menuCheckUpdates.Enable()
 		log.Printf("Already up to date: %s", currentVersion)
 		// Show up to date dialog
@@ -119,6 +135,24 @@ func checkForUpdatesWithUI() {
 func checkForUpdatesBackground() {
 	// Wait a bit before checking to not slow down startup
 	time.Sleep(5 * time.Second)
+
+	// Check if update checks are disabled
+	if !cfg.User.UpdateCheckEnabled {
+		log.Printf("Update checks disabled by user")
+		return
+	}
+
+	// Check if we should check for updates based on interval
+	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
+	checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
+	if cfg.User.UpdateCheckIntervalDays == 0 {
+		checkInterval = 24 * time.Hour // Default to daily
+	}
+
+	if time.Since(lastCheckTime) < checkInterval {
+		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
+		return
+	}
 
 	release, err := fetchLatestRelease()
 	if err != nil {
@@ -134,10 +168,198 @@ func checkForUpdatesBackground() {
 	latestVersion = normalizeVersion(release.TagName)
 	currentVersion := normalizeVersion(version)
 
+	// Update last check time
+	cfg.User.LastUpdateCheckTime = time.Now().Unix()
+	if err := config.SaveUserConfig(&cfg.User); err != nil {
+		log.Printf("Failed to save config after update check: %v", err)
+	}
+
 	if isNewerVersion(latestVersion, currentVersion) {
 		updateStatus = UpdateStatusAvailable
-		menuCheckUpdates.SetTitle(fmt.Sprintf("Update Available: v%s ↗", latestVersion))
+		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+		if menuDismissUpdate != nil {
+			menuDismissUpdate.Show()
+		}
 		log.Printf("Update available (background check): %s -> %s", currentVersion, latestVersion)
+
+		// Check if user dismissed this version
+		if cfg.User.DismissedUpdateVersion == latestVersion {
+			log.Printf("User dismissed update v%s, skipping notification", latestVersion)
+			return
+		}
+
+		// Show persistent notification
+		showUpdateNotification(latestVersion, release)
+	} else {
+		updateStatus = UpdateStatusUpToDate
+		if menuDismissUpdate != nil {
+			menuDismissUpdate.Hide()
+		}
+		log.Printf("Already up to date: %s", currentVersion)
+	}
+}
+
+// startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
+func startPeriodicUpdateChecker() {
+	if !cfg.User.UpdateCheckEnabled {
+		return
+	}
+
+	go func() {
+		// Initial check after startup
+		checkForUpdatesBackground()
+
+		// Set up periodic checks
+		checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
+		if cfg.User.UpdateCheckIntervalDays == 0 {
+			checkInterval = 24 * time.Hour
+		}
+
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if !cfg.User.UpdateCheckEnabled {
+				log.Printf("Update checks disabled, stopping periodic checker")
+				return
+			}
+
+			release, err := fetchLatestRelease()
+			if err != nil {
+				log.Printf("Periodic update check failed: %v", err)
+				continue
+			}
+
+			latestVersion = normalizeVersion(release.TagName)
+			currentVersion := normalizeVersion(version)
+
+			// Update last check time
+			cfg.User.LastUpdateCheckTime = time.Now().Unix()
+			if err := config.SaveUserConfig(&cfg.User); err != nil {
+				log.Printf("Failed to save config after periodic update check: %v", err)
+			}
+
+			if isNewerVersion(latestVersion, currentVersion) {
+				if cfg.User.DismissedUpdateVersion != latestVersion {
+					updateStatus = UpdateStatusAvailable
+					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+					if menuDismissUpdate != nil {
+						menuDismissUpdate.Show()
+					}
+					log.Printf("Update available (periodic check): %s -> %s", currentVersion, latestVersion)
+
+					// Show notification if persistent notifications are enabled
+					if cfg.User.UpdateNotifyPersistent {
+						showUpdateNotification(latestVersion, release)
+					}
+				}
+			} else {
+				if menuDismissUpdate != nil {
+					menuDismissUpdate.Hide()
+				}
+			}
+		}
+	}()
+}
+
+// startPersistentUpdateNotifier sends periodic reminders about available updates
+func startPersistentUpdateNotifier() {
+	if !cfg.User.UpdateNotifyPersistent {
+		return
+	}
+
+	notifyInterval := time.Duration(cfg.User.UpdateNotifyIntervalMin) * time.Minute
+	if cfg.User.UpdateNotifyIntervalMin == 0 {
+		notifyInterval = 6 * time.Hour // Default to 6 hours
+	}
+
+	go func() {
+		ticker := time.NewTicker(notifyInterval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			// Only notify if update is available and not dismissed
+			if updateStatus == UpdateStatusAvailable &&
+				cfg.User.DismissedUpdateVersion != latestVersion &&
+				cfg.User.UpdateNotifyPersistent {
+
+				// Check if we've sent a notification recently
+				if time.Since(lastNotificationTime) >= notifyInterval {
+					currentVersion := normalizeVersion(version)
+					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
+					sendNativeNotification(
+						"cassh Update Available",
+						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+						"update-available",
+					)
+					lastNotificationTime = time.Now()
+				}
+			}
+		}
+	}()
+}
+
+// showUpdateNotification shows a native macOS notification about the update
+func showUpdateNotification(newVersion string, release *GitHubRelease) {
+	currentVersion := normalizeVersion(version)
+	message := fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download or dismiss in menu.", newVersion, currentVersion)
+
+	sendNativeNotification(
+		"cassh Update Available",
+		message,
+		"update-available",
+	)
+
+	lastNotificationTime = time.Now()
+	updateNotificationSent = true
+}
+
+// sendNativeNotification sends a macOS User Notification
+func sendNativeNotification(title, message, identifier string) {
+	script := fmt.Sprintf(`
+		display notification "%s" with title "%s" sound name "default"
+	`, escapeForAppleScript(message), escapeForAppleScript(title))
+
+	cmd := exec.Command("osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		log.Printf("Failed to send notification: %v", err)
+	}
+}
+
+// escapeForAppleScript escapes quotes and backslashes for AppleScript
+func escapeForAppleScript(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return s
+}
+
+// dismissUpdate marks the current update version as dismissed
+func dismissUpdate() {
+	if latestVersion == "" {
+		return
+	}
+
+	cfg.User.DismissedUpdateVersion = latestVersion
+	if err := config.SaveUserConfig(&cfg.User); err != nil {
+		log.Printf("Failed to save dismissed update version: %v", err)
+	} else {
+		log.Printf("Dismissed update v%s", latestVersion)
+		updateStatus = UpdateStatusUpToDate
+		menuCheckUpdates.SetTitle("Check for Updates...")
+		if menuDismissUpdate != nil {
+			menuDismissUpdate.Hide()
+		}
+		showNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion))
+	}
+}
+
+// clearDismissedUpdate clears the dismissed update version (called when manually checking for updates)
+func clearDismissedUpdate() {
+	if cfg.User.DismissedUpdateVersion != "" {
+		cfg.User.DismissedUpdateVersion = ""
+		if err := config.SaveUserConfig(&cfg.User); err != nil {
+			log.Printf("Failed to clear dismissed update version: %v", err)
+		}
 	}
 }
 
