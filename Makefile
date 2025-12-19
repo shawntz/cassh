@@ -29,7 +29,14 @@ POLICY_FILE ?= cassh.policy.example.toml
         icon app-bundle app-bundle-oss app-bundle-enterprise \
         dmg dmg-only pkg pkg-only \
         sign notarize \
+<<<<<<< Updated upstream
         test lint
+=======
+        test test-race test-coverage test-ci test-list \
+        test-ca test-config test-memes test-menubar \
+        lint \
+        changelog changelog-preview create-release
+>>>>>>> Stashed changes
 
 # Default: build all binaries
 all: deps build
@@ -300,6 +307,48 @@ dev-ca:
 	ssh-keygen -t ed25519 -f dev/ca_key -N "" -C "cassh-dev-ca"
 	@echo "CA key generated: dev/ca_key"
 	@echo "CA public key: dev/ca_key.pub"
+
+# =============================================================================
+# Changelog and Release Management
+# =============================================================================
+
+# Generate changelog preview from last tag to HEAD
+changelog-preview:
+	@echo "Generating changelog preview..."
+	@./scripts/generate-changelog
+
+# Update CHANGELOG.md with unreleased changes (same as CI does)
+changelog:
+	@echo "Updating CHANGELOG.md with unreleased changes..."
+	@LAST_TAG=$$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD); \
+	./scripts/generate-changelog "$$LAST_TAG" HEAD > /tmp/changelog-unreleased.md
+	@echo "Preview:"
+	@cat /tmp/changelog-unreleased.md
+	@echo ""
+	@read -p "Update CHANGELOG.md? [y/N] " -n 1 -r; echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cp CHANGELOG.md CHANGELOG.md.bak; \
+		{ \
+			sed -n '1,/## \[Unreleased\]/p' CHANGELOG.md | head -n -1; \
+			cat /tmp/changelog-unreleased.md; \
+			echo ""; \
+			sed -n '/## \[Unreleased\]/,$$ { /## \[Unreleased\]/d; /^$$/d; p }' CHANGELOG.md | sed '1,/^## \[/d' | sed '1s/^/\n/'; \
+		} > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md; \
+		rm CHANGELOG.md.bak; \
+		echo "✓ CHANGELOG.md updated"; \
+	else \
+		echo "Cancelled"; \
+	fi
+
+# Create a new release (interactive)
+# Usage: make create-release VERSION=1.2.0
+create-release:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION not specified"; \
+		echo "Usage: make create-release VERSION=1.2.0"; \
+		exit 1; \
+	fi
+	@./scripts/create-release $(VERSION)
 
 # =============================================================================
 # Clean
