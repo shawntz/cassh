@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -412,6 +414,7 @@ func LoadUserConfig() (*UserConfig, error) {
 
 // SaveUserConfig persists user prefs
 // Always saves to dotfiles location (~/.config/cassh/config.toml) for easy backup
+// Uses file locking to prevent race conditions when GUI and background rotation run concurrently
 func SaveUserConfig(config *UserConfig) error {
 	// Always use dotfiles location for new saves - it's user-friendly and backup-friendly
 	configPath := DotfilesConfigPath()
@@ -426,11 +429,69 @@ func SaveUserConfig(config *UserConfig) error {
 		return fmt.Errorf("failed to serialize config: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
+	// Acquire file lock before writing
+	lockPath := configPath + ".lock"
+	lockFile, err := acquireFileLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("failed to acquire config lock: %w", err)
+	}
+	defer releaseFileLock(lockFile)
+
+	// Write config atomically (write to temp file, then rename)
+	tempPath := configPath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
+	if err := os.Rename(tempPath, configPath); err != nil {
+		os.Remove(tempPath) // Clean up temp file on error
+		return fmt.Errorf("failed to rename config: %w", err)
+	}
+
 	return nil
+}
+
+// acquireFileLock creates and locks a file, retrying for up to 5 seconds
+func acquireFileLock(lockPath string) (*os.File, error) {
+	const maxRetries = 50
+	const retryDelay = 100 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+		if err != nil {
+			return nil, err
+		}
+
+		// Try to acquire exclusive lock
+		err = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return lockFile, nil
+		}
+
+		lockFile.Close()
+
+		// If lock is held by another process, retry
+		// EAGAIN and EWOULDBLOCK are typically the same on Unix systems
+		if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		return nil, err
+	}
+
+	return nil, fmt.Errorf("timeout waiting for file lock")
+}
+
+// releaseFileLock unlocks and closes the lock file
+// Errors are intentionally ignored as they are non-critical:
+// - Unlock errors: advisory lock will be released on process exit
+// - Close errors: file descriptor will be released by OS
+func releaseFileLock(lockFile *os.File) {
+	if lockFile != nil {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	}
 }
 
 // SaveUserConfigToDotfiles saves config to the dotfiles location (~/.config/cassh/config.toml)
