@@ -128,9 +128,15 @@ type Connection struct {
 	IsActive bool `toml:"-"`
 }
 
-// IsGitHub returns true if this is a GitHub connection
+// IsGitHub returns true if this is a GitHub connection.
+//
+// NOTE: For historical reasons, an empty Platform value is treated as GitHub.
+// Older configs did not persist the Platform field at all, so connections created
+// before Platform was introduced will have Platform == "" and must continue to be
+// interpreted as GitHub. Do not change this behavior unless you also provide a
+// migration path for existing user configurations.
 func (c *Connection) IsGitHub() bool {
-	return c.Platform == PlatformGitHub || c.Platform == "" // Empty platform defaults to GitHub for backwards compat
+	return c.Platform == PlatformGitHub || c.Platform == ""
 }
 
 // IsGitLab returns true if this is a GitLab connection
