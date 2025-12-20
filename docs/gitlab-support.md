@@ -56,9 +56,10 @@ ssh_cert_path = "~/.ssh/cassh_gitlab_work_id_ed25519-cert.pub"
 
 1. Go to GitLab → Preferences → Access Tokens
 2. Create a new token with the following scopes:
-   - `api` (required for SSH key management)
-3. Copy the token and save it in your cassh config
+   - `api` (required for SSH key management; note that this scope grants full read/write access to the GitLab API according to your account permissions, not just SSH key operations)
+3. Copy the token and save it in your cassh config, storing it securely (for example, in an encrypted secrets store) and treating it as a high‑privilege credential
 
+> **Note:** GitLab currently exposes SSH key management only under the `api` scope. This is why cassh requires a token with `api` scope, even though this scope is broader than strictly necessary for SSH key management.
 ### How It Works
 
 1. **Key Generation**: cassh generates an Ed25519 SSH key
