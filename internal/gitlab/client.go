@@ -207,12 +207,31 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err != nil {
-		// If parsing fails, try to extract manually
-		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
-		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
-		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
-		return gitlabURL
+	if err == nil && parsed.Hostname() != "" {
+		// Use the parsed hostname, which excludes any port.
+		return parsed.Hostname()
 	}
-	return parsed.Host
+
+	// If parsing fails or no hostname is found, try to extract manually.
+	if err != nil {
+		fmt.Printf("warning: failed to parse GitLab URL %q: %v\n", gitlabURL, err)
+	}
+
+	host := strings.TrimPrefix(gitlabURL, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "//")
+	host = strings.TrimSpace(host)
+	host = strings.TrimSuffix(host, "/")
+
+	// Remove any path component.
+	if idx := strings.Index(host, "/"); idx != -1 {
+		host = host[:idx]
+	}
+
+	// Remove any port component.
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+
+	return host
 }
