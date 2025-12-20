@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -42,12 +43,12 @@ const (
 )
 
 var (
-	menuCheckUpdates       *systray.MenuItem
-	menuDismissUpdate      *systray.MenuItem
-	latestVersion          string
-	updateStatus           UpdateStatus
-	lastNotificationTime   time.Time
-	updateNotificationSent bool
+	menuCheckUpdates     *systray.MenuItem
+	menuDismissUpdate    *systray.MenuItem
+	latestVersion        string
+	updateStatus         UpdateStatus
+	lastNotificationTime time.Time
+	configMutex            sync.RWMutex // Protects concurrent access to cfg.User fields
 )
 
 // setupUpdateMenu adds the update menu items
@@ -186,6 +187,7 @@ func checkForUpdatesBackground() {
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after update check: %v", err)
 	}
+	configMutex.Unlock()
 
 	if isNewerVersion(latestVersion, currentVersion) {
 		updateStatus = UpdateStatusAvailable
@@ -272,6 +274,7 @@ func startPeriodicUpdateChecker() {
 			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
+			configMutex.Unlock()
 
 			if isNewerVersion(latestVersion, currentVersion) {
 				cfgMutex.RLock()
@@ -328,6 +331,11 @@ func startPersistentUpdateNotifier() {
 			cfgMutex.RUnlock()
 
 			// Only notify if update is available and not dismissed
+			configMutex.RLock()
+			dismissedVersion := cfg.User.DismissedUpdateVersion
+			notifyPersistent := cfg.User.UpdateNotifyPersistent
+			configMutex.RUnlock()
+
 			if updateStatus == UpdateStatusAvailable &&
 				dismissedVersion != latestVersion &&
 				persistent {
@@ -336,10 +344,10 @@ func startPersistentUpdateNotifier() {
 				if time.Since(lastNotificationTime) >= notifyInterval {
 					currentVersion := normalizeVersion(version)
 					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
-					sendNativeNotification(
+					sendNotificationWithCategory(
 						"cassh Update Available",
 						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-						"update-available",
+						"UPDATE_AVAILABLE",
 					)
 					lastNotificationTime = time.Now()
 				}
@@ -353,33 +361,14 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	currentVersion := normalizeVersion(version)
 	message := fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download or dismiss in menu.", newVersion, currentVersion)
 
-	sendNativeNotification(
+	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
-		"update-available",
+		"UPDATE_AVAILABLE",
 	)
 
 	lastNotificationTime = time.Now()
 	updateNotificationSent = true
-}
-
-// sendNativeNotification sends a macOS User Notification
-func sendNativeNotification(title, message, identifier string) {
-	script := fmt.Sprintf(`
-		display notification "%s" with title "%s" sound name "default"
-	`, escapeForAppleScript(message), escapeForAppleScript(title))
-
-	cmd := exec.Command("osascript", "-e", script)
-	if err := cmd.Run(); err != nil {
-		log.Printf("Failed to send notification: %v", err)
-	}
-}
-
-// escapeForAppleScript escapes quotes and backslashes for AppleScript
-func escapeForAppleScript(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "\"", "\\\"")
-	return s
 }
 
 // dismissUpdate marks the current update version as dismissed
@@ -406,8 +395,9 @@ func dismissUpdate() {
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
 		}
-		sendNativeNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion))
+		sendNotificationWithCategory("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion), "GENERAL")
 	}
+	configMutex.Unlock()
 }
 
 // clearDismissedUpdate clears the dismissed update version (called when manually checking for updates)
@@ -428,6 +418,7 @@ func clearDismissedUpdate() {
 	} else {
 		cfgMutex.Unlock()
 	}
+	configMutex.Unlock()
 }
 
 // fetchLatestRelease fetches the latest release from GitHub API
