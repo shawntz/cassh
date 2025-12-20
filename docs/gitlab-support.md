@@ -181,10 +181,13 @@ Located in `internal/gitlab/client.go`:
 
 ```go
 // Create client
-client := gitlab.NewClient("https://gitlab.com", "glpat-xxxxxxxxxxxxxxxxxxxx")
+client, err := gitlab.NewClient("https://gitlab.com", "glpat-xxxxxxxxxxxxxxxxxxxx")
+if err != nil {
+    return err
+}
 
 // Validate token
-err := client.ValidateToken()
+err = client.ValidateToken()
 
 // List SSH keys
 keys, err := client.ListSSHKeys()
@@ -193,7 +196,7 @@ keys, err := client.ListSSHKeys()
 key, err := client.CreateSSHKey("cassh-key", pubKeyContent, nil)
 
 // Delete SSH key
-err := client.DeleteSSHKey(keyID)
+err = client.DeleteSSHKey(keyID)
 
 // Get current user
 user, err := client.GetCurrentUser()
