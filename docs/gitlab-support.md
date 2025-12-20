@@ -363,8 +363,10 @@ If you want to use GitLab support today, you can:
    username = "yourusername"
    ssh_key_path = "~/.ssh/cassh_gitlab_id_ed25519"
    key_rotation_hours = 168
-   gitlab_token = "glpat-xxxxxxxxxxxxxxxxxxxx"
+   gitlab_token = "your-gitlab-personal-access-token-here"
    ```
+   
+   > **Security Note:** Replace `your-gitlab-personal-access-token-here` with your actual GitLab Personal Access Token. Keep this file secure and never commit it to version control.
 
 2. **Manually generate and upload the SSH key**:
    ```bash
@@ -389,7 +391,7 @@ For GitLab Enterprise with certificates, the server-side infrastructure is ready
 
 ### 📊 Implementation Status
 
-For detailed implementation status and developer notes, see [GITLAB_IMPLEMENTATION_STATUS.md](/GITLAB_IMPLEMENTATION_STATUS.md) in the repository root.
+For detailed implementation status and developer notes, see [GITLAB_IMPLEMENTATION_STATUS.md](../GITLAB_IMPLEMENTATION_STATUS.md) in the repository root.
 
 ## GitLab Resources
 
