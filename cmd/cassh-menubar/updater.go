@@ -250,6 +250,16 @@ func startPeriodicUpdateChecker() {
 		defer ticker.Stop()
 
 		for range ticker.C {
+			// Check if updates were disabled since last check
+			configMutex.RLock()
+			updateCheckEnabled := cfg.User.UpdateCheckEnabled
+			configMutex.RUnlock()
+
+			if !updateCheckEnabled {
+				log.Printf("Update checks disabled, stopping periodic checker")
+				return
+			}
+
 			// Use the same update check logic with interval validation
 			performUpdateCheck("periodic")
 		}
