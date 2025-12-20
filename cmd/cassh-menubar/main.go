@@ -91,6 +91,9 @@ func main() {
 	// Uses SMAppService on macOS 13+, falls back to LaunchAgent on older versions
 	registerAsLoginItem()
 
+	// Setup Dock icon click handler to open settings window
+	setupDockIconClickHandler()
+
 	// Load templates for setup wizard
 	var err error
 	templates, err = template.ParseFS(templatesFS, "templates/*.html")
