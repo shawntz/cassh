@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	// errFailedToReadResponseBody is the fallback error message when reading the response body fails
+	errFailedToReadResponseBody = "failed to read response body"
+)
+
 // Client represents a GitLab API client
 type Client struct {
 	baseURL string
@@ -174,7 +179,7 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		}
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			body = []byte("failed to read response body")
+			body = []byte(errFailedToReadResponseBody)
 		}
 		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
 	}
@@ -193,7 +198,7 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			body = []byte("failed to read response body")
+			body = []byte(errFailedToReadResponseBody)
 		}
 		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
 	}
