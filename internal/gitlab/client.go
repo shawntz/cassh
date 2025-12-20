@@ -157,7 +157,7 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	if resp.StatusCode != http.StatusCreated {
 		sanitizedMsg := sanitizeErrorMessage(body)
 		// Check if key already exists
-		if strings.Contains(sanitizedMsg, "has already been taken") || strings.Contains(sanitizedMsg, "already been taken") {
+		if strings.Contains(sanitizedMsg, "has already been taken") {
 			// Try to find the existing key
 			existingKey, err := c.GetSSHKeyByTitle(title)
 			if err != nil {
@@ -235,6 +235,14 @@ func ExtractHostFromURL(gitlabURL string) string {
 		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
 		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
 		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
+		// Remove port if present
+		if idx := strings.Index(gitlabURL, ":"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		// Remove path if present
+		if idx := strings.Index(gitlabURL, "/"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
 		return gitlabURL
 	}
 	return parsed.Hostname()

@@ -98,6 +98,21 @@ func TestExtractHostFromURL(t *testing.T) {
 			url:      "gitlab.com/",
 			expected: "gitlab.com",
 		},
+		{
+			name:     "Plain hostname with port",
+			url:      "gitlab.com:8080",
+			expected: "gitlab.com",
+		},
+		{
+			name:     "Plain hostname with port and path",
+			url:      "gitlab.com:8080/path",
+			expected: "gitlab.com",
+		},
+		{
+			name:     "URL with path",
+			url:      "https://gitlab.com/some/path",
+			expected: "gitlab.com",
+		},
 	}
 
 	for _, tt := range tests {
