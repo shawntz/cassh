@@ -330,16 +330,20 @@ func startPersistentUpdateNotifier() {
 			configMutex.RUnlock()
 
 			if updateStatus == UpdateStatusAvailable &&
-				dismissedVersion != latestVersion &&
-				notifyPersistent {
+				cfg.User.DismissedUpdateVersion != latestVersion &&
+				cfg.User.UpdateNotifyPersistent {
 
-				currentVersion := normalizeVersion(version)
-				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
-				sendNativeNotification(
-					"cassh Update Available",
-					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-					"update-available",
-				)
+				// Check if we've sent a notification recently
+				if time.Since(lastNotificationTime) >= notifyInterval {
+					currentVersion := normalizeVersion(version)
+					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
+					sendNotificationWithCategory(
+						"cassh Update Available",
+						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+						"UPDATE_AVAILABLE",
+					)
+					lastNotificationTime = time.Now()
+				}
 			}
 		}
 	}()
@@ -350,36 +354,14 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	currentVersion := normalizeVersion(version)
 	message := fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download or dismiss in menu.", newVersion, currentVersion)
 
-	sendNativeNotification(
+	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
-		"update-available",
+		"UPDATE_AVAILABLE",
 	)
 
 	lastNotificationTime = time.Now()
 	updateNotificationSent = true
-}
-
-// sendNativeNotification sends a macOS User Notification
-func sendNativeNotification(title, message, identifier string) {
-	script := fmt.Sprintf(`
-		display notification "%s" with title "%s" sound name "default"
-	`, escapeForAppleScript(message), escapeForAppleScript(title))
-
-	cmd := exec.Command("osascript", "-e", script)
-	if err := cmd.Run(); err != nil {
-		log.Printf("Failed to send notification: %v", err)
-	}
-}
-
-// escapeForAppleScript escapes quotes, backslashes, and control chars for AppleScript
-func escapeForAppleScript(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "\"", "\\\"")
-	// Replace newline and carriage return characters with a visible \n sequence
-	s = strings.ReplaceAll(s, "\r", "\\n")
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	return s
 }
 
 // dismissUpdate marks the current update version as dismissed
@@ -399,7 +381,7 @@ func dismissUpdate() {
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
 		}
-		sendNativeNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion))
+		sendNotificationWithCategory("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion), "GENERAL")
 	}
 	configMutex.Unlock()
 }
