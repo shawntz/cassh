@@ -10,6 +10,38 @@ import (
 	"github.com/shawntz/cassh/internal/config"
 )
 
+// Test Coverage for updater.go
+//
+// This test file provides comprehensive coverage for the updater package, focusing on:
+//
+// 1. Version Comparison Logic:
+//    - normalizeVersion: Handles v prefix, suffixes, edge cases
+//    - isNewerVersion: Semantic version comparison including dev builds
+//
+// 2. State Management:
+//    - dismissUpdate: Update dismissal tracking
+//    - clearDismissedUpdate: Clearing dismissal state
+//
+// 3. Configuration:
+//    - Periodic update checker configuration and interval calculation
+//    - Persistent notifier configuration and interval calculation
+//
+// 4. Concurrency Safety:
+//    - Mutex protection for config access
+//    - Concurrent read/write scenarios
+//
+// 5. Helper Functions:
+//    - escapeForAppleScript: String escaping for AppleScript dialogs
+//
+// Note: UI-related functions (setupUpdateMenu, show dialogs, notifications) and
+// network calls (fetchLatestRelease) are not directly tested as they require
+// macOS system integration or external services. These are tested through
+// integration testing and manual QA.
+//
+// Background goroutines (startPeriodicUpdateChecker, startPersistentUpdateNotifier)
+// are tested for their configuration logic but not for actual background execution
+// to avoid timing-dependent tests.
+
 func TestNormalizeVersion(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -541,5 +573,89 @@ func TestGitHubReleaseStructure(t *testing.T) {
 
 	if release.HTMLURL == "" {
 		t.Error("HTMLURL should not be empty")
+	}
+}
+
+// TestVersionComparisonEdgeCases tests additional edge cases for version comparison
+func TestVersionComparisonEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		latest   string
+		current  string
+		expected bool
+	}{
+		{
+			name:     "Both versions with single digit",
+			latest:   "2",
+			current:  "1",
+			expected: true,
+		},
+		{
+			name:     "Latest with two parts, current with three",
+			latest:   "1.5",
+			current:  "1.4.9",
+			expected: true,
+		},
+		{
+			name:     "Latest 1.10.0 vs current 1.9.0",
+			latest:   "1.10.0",
+			current:  "1.9.0",
+			expected: true,
+		},
+		{
+			name:     "Latest 1.9.0 vs current 1.10.0",
+			latest:   "1.9.0",
+			current:  "1.10.0",
+			expected: false,
+		},
+		{
+			name:     "Large version numbers",
+			latest:   "100.200.300",
+			current:  "100.200.299",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isNewerVersion(tt.latest, tt.current)
+			if result != tt.expected {
+				t.Errorf("isNewerVersion(%q, %q) = %v, want %v", tt.latest, tt.current, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestNormalizeVersionEdgeCases tests additional edge cases for version normalization
+func TestNormalizeVersionEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Multiple hyphens",
+			input:    "v1.2.3-beta-1",
+			expected: "1.2.3",
+		},
+		{
+			name:     "Just v prefix",
+			input:    "v",
+			expected: "",
+		},
+		{
+			name:     "Version with plus",
+			input:    "1.2.3+build.123",
+			expected: "1.2.3+build.123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeVersion(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeVersion(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
 	}
 }
