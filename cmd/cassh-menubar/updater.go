@@ -237,13 +237,12 @@ func startPeriodicUpdateChecker() {
 						newInterval = 24 * time.Hour
 					}
 
-					log.Printf("Update check interval changed from %d to %d days, recreating ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
+					log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
 					currentIntervalDays = userCfg.UpdateCheckIntervalDays
 					cfg.User.UpdateCheckIntervalDays = userCfg.UpdateCheckIntervalDays
 
-					// Recreate ticker with new interval
-					ticker.Stop()
-					ticker = time.NewTicker(newInterval)
+					// Reset ticker with new interval (no memory leak, same ticker instance)
+					ticker.Reset(newInterval)
 				}
 
 				// Update global config with reloaded values
