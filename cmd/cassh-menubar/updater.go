@@ -144,10 +144,7 @@ func checkForUpdatesBackground() {
 
 	// Check if we should check for updates based on interval
 	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
-	checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
-	if cfg.User.UpdateCheckIntervalDays == 0 {
-		checkInterval = 24 * time.Hour // Default to daily
-	}
+	checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
@@ -199,6 +196,15 @@ func checkForUpdatesBackground() {
 	}
 }
 
+// calculateCheckInterval returns the check interval duration based on configured days
+// If days is 0, defaults to 24 hours (daily)
+func calculateCheckInterval(days int) time.Duration {
+	if days == 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
 // startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
 func startPeriodicUpdateChecker() {
 	if !cfg.User.UpdateCheckEnabled {
@@ -210,10 +216,7 @@ func startPeriodicUpdateChecker() {
 		checkForUpdatesBackground()
 
 		// Set up periodic checks with dynamic config reloading
-		checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
-		if cfg.User.UpdateCheckIntervalDays == 0 {
-			checkInterval = 24 * time.Hour
-		}
+		checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
@@ -229,17 +232,15 @@ func startPeriodicUpdateChecker() {
 
 			// Reload config to check for interval changes
 			userCfg, err := config.LoadUserConfig()
-			if err == nil {
+			if err != nil {
+				log.Printf("Failed to reload config for update check: %v", err)
+			} else {
 				// Check if the interval has changed
 				if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
-					newInterval := time.Duration(userCfg.UpdateCheckIntervalDays) * 24 * time.Hour
-					if userCfg.UpdateCheckIntervalDays == 0 {
-						newInterval = 24 * time.Hour
-					}
+					newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
 
 					log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
 					currentIntervalDays = userCfg.UpdateCheckIntervalDays
-					cfg.User.UpdateCheckIntervalDays = userCfg.UpdateCheckIntervalDays
 
 					// Reset ticker with new interval (no memory leak, same ticker instance)
 					ticker.Reset(newInterval)
