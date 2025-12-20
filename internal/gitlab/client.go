@@ -43,6 +43,29 @@ func NewClient(baseURL, token string) *Client {
 	}
 }
 
+// sanitizeErrorMessage extracts a safe error message from the response body
+// without exposing potentially sensitive information
+func sanitizeErrorMessage(body []byte) string {
+	// Try to parse as JSON and extract only the message field
+	var errResponse struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	
+	if err := json.Unmarshal(body, &errResponse); err == nil {
+		if errResponse.Message != "" {
+			return errResponse.Message
+		}
+		if errResponse.Error != "" {
+			return errResponse.Error
+		}
+	}
+	
+	// If we can't parse the JSON or there's no message field,
+	// return a generic error message to avoid exposing sensitive data
+	return "API request failed (response body omitted for security)"
+}
+
 // doRequest performs an HTTP request with authentication
 func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Response, error) {
 	var reqBody io.Reader
@@ -85,7 +108,7 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	var keys []SSHKey
@@ -143,7 +166,7 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 				return existingKey, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -169,7 +192,7 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 			return nil
 		}
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	return nil
@@ -185,7 +208,7 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	var user map[string]interface{}
