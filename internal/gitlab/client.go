@@ -75,6 +75,11 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 	return resp, nil
 }
 
+// sanitizeAPIError creates a safe error message from an API response without exposing sensitive data
+func sanitizeAPIError(operation string, statusCode int) error {
+	return fmt.Errorf("%s: API request failed with status %d", operation, statusCode)
+}
+
 // ListSSHKeys retrieves all SSH keys for the authenticated user
 func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	resp, err := c.doRequest("GET", "/api/v4/user/keys", nil)
@@ -84,7 +89,7 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to list SSH keys: unexpected status code %d", resp.StatusCode)
+		return nil, sanitizeAPIError("failed to list SSH keys", resp.StatusCode)
 	}
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
@@ -144,7 +149,7 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 				}
 			}
 		}
-		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, sanitizeAPIError("failed to create SSH key", resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -169,8 +174,7 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return sanitizeAPIError("failed to delete SSH key", resp.StatusCode)
 	}
 
 	return nil
@@ -185,8 +189,7 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, sanitizeAPIError("failed to get user info", resp.StatusCode)
 	}
 
 	var user map[string]interface{}
