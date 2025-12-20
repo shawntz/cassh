@@ -2,6 +2,36 @@
 
 This document tracks the implementation of GitLab support in cassh.
 
+## Change Type Classification
+
+**Primary Type:** New Feature (non-breaking)
+
+This PR introduces GitLab platform support alongside existing GitHub functionality. The implementation is designed with the following characteristics:
+
+### ✅ New Feature
+- Adds comprehensive GitLab API client (`internal/gitlab/client.go`)
+- Introduces platform-agnostic configuration structure
+- Implements GitLab SSH certificate signing
+- Provides GitLab-specific documentation
+
+### ✅ Refactoring (Backwards Compatible)
+- Migrates `GitHubHost` → `Host` and `GitHubUsername` → `Username` in config structs
+- Implements automatic migration via `MigrateDeprecatedFields()` to preserve existing configs
+- Adds helper methods (`GetHost()`, `GetUsername()`) that handle both old and new field names
+- Maintains full backwards compatibility - existing GitHub-only configurations continue to work without modification
+
+### ❌ Not a Bug Fix
+- Does not address any existing issues or defects
+- No corrective changes to broken functionality
+
+### ❌ Not a Breaking Change
+- **Backwards compatible:** Old `GitHubHost` and `GitHubUsername` fields are automatically migrated
+- **Default behavior preserved:** Platform defaults to `github` when not specified
+- **Existing workflows unchanged:** All GitHub functionality continues to work identically
+- **No API changes:** Server endpoints and CLI interface remain the same
+
+The refactoring aspect involves restructuring configuration fields to be platform-agnostic, but the automatic migration and helper methods ensure zero breaking changes for existing users.
+
 ## ✅ Completed
 
 ### 1. GitLab API Client (`internal/gitlab/client.go`)
