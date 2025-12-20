@@ -44,7 +44,11 @@ func setupVisibilityMenu() *systray.MenuItem {
 	// Create "Appearance" submenu
 	menuAppearance := systray.AddMenuItem("Appearance", "App visibility options")
 
-	menuShowInDock = menuAppearance.AddSubMenuItemCheckbox("Show in Dock", "Show cassh icon in the Dock", cfg.User.ShowInDock)
+	cfgMutex.RLock()
+	showInDock := cfg.User.ShowInDock
+	cfgMutex.RUnlock()
+
+	menuShowInDock = menuAppearance.AddSubMenuItemCheckbox("Show in Dock", "Show cassh icon in the Dock", showInDock)
 
 	return menuAppearance
 }
@@ -55,23 +59,38 @@ func handleShowInDockToggle() {
 		// Currently checked, uncheck it (hide from dock)
 		menuShowInDock.Uncheck()
 		hideFromDock()
+		cfgMutex.Lock()
 		cfg.User.ShowInDock = false
+		userConfigCopy := cfg.User
+		cfgMutex.Unlock()
+
+		// Save preference
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
+			log.Printf("Failed to save dock visibility preference: %v", err)
+		}
 	} else {
 		// Currently unchecked, check it (show in dock)
 		menuShowInDock.Check()
 		showInDock()
+		cfgMutex.Lock()
 		cfg.User.ShowInDock = true
-	}
+		userConfigCopy := cfg.User
+		cfgMutex.Unlock()
 
-	// Save preference
-	if err := config.SaveUserConfig(&cfg.User); err != nil {
-		log.Printf("Failed to save dock visibility preference: %v", err)
+		// Save preference
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
+			log.Printf("Failed to save dock visibility preference: %v", err)
+		}
 	}
 }
 
 // applyVisibilitySettings applies saved visibility settings on startup
 func applyVisibilitySettings() {
-	if cfg.User.ShowInDock {
+	cfgMutex.RLock()
+	showInDock := cfg.User.ShowInDock
+	cfgMutex.RUnlock()
+
+	if showInDock {
 		showInDock()
 	} else {
 		hideFromDock()
