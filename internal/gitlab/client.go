@@ -133,14 +133,18 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	defer resp.Body.Close()
 
 	// Read the body for duplicate key detection (not exposed in errors)
-	// We ignore the error here since we handle the HTTP status code below
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	// If we can't read the body, we won't be able to detect duplicate keys,
+	// but we can still return a sanitized error based on the status code
+	if readErr != nil {
+		body = nil
+	}
 
 	if resp.StatusCode != http.StatusCreated {
 		// Check if key already exists (handle only relevant error status codes)
 		// Note: We use the response body internally to detect duplicate keys,
 		// but we don't expose it in the error message to prevent data leakage
-		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict {
+		if body != nil && (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict) {
 			bodyStr := strings.ToLower(string(body))
 			if strings.Contains(bodyStr, "has already been taken") || strings.Contains(bodyStr, "already exists") {
 				// Try to find the existing key
