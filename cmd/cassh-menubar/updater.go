@@ -177,10 +177,15 @@ func checkForUpdatesBackground() {
 	cfgMutex.Lock()
 	cfg.User.LastUpdateCheckTime = time.Now().Unix()
 	userConfigCopy := cfg.User
+	// Deep copy Connections slice to avoid sharing underlying array
+	if len(userConfigCopy.Connections) > 0 {
+		userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+	}
+	cfgMutex.Unlock()
+
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after update check: %v", err)
 	}
-	cfgMutex.Unlock()
 
 	if isNewerVersion(latestVersion, currentVersion) {
 		updateStatus = UpdateStatusAvailable
@@ -258,10 +263,15 @@ func startPeriodicUpdateChecker() {
 			cfgMutex.Lock()
 			cfg.User.LastUpdateCheckTime = time.Now().Unix()
 			userConfigCopy := cfg.User
+			// Deep copy Connections slice to avoid sharing underlying array
+			if len(userConfigCopy.Connections) > 0 {
+				userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+			}
+			cfgMutex.Unlock()
+
 			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
-			cfgMutex.Unlock()
 
 			if isNewerVersion(latestVersion, currentVersion) {
 				cfgMutex.RLock()
@@ -381,10 +391,13 @@ func dismissUpdate() {
 	cfgMutex.Lock()
 	cfg.User.DismissedUpdateVersion = latestVersion
 	userConfigCopy := cfg.User
-	err := config.SaveUserConfig(&userConfigCopy)
+	// Deep copy Connections slice to avoid sharing underlying array
+	if len(userConfigCopy.Connections) > 0 {
+		userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+	}
 	cfgMutex.Unlock()
 
-	if err != nil {
+	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save dismissed update version: %v", err)
 	} else {
 		log.Printf("Dismissed update v%s", latestVersion)
@@ -403,6 +416,10 @@ func clearDismissedUpdate() {
 	if cfg.User.DismissedUpdateVersion != "" {
 		cfg.User.DismissedUpdateVersion = ""
 		userConfigCopy := cfg.User
+		// Deep copy Connections slice to avoid sharing underlying array
+		if len(userConfigCopy.Connections) > 0 {
+			userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+		}
 		cfgMutex.Unlock()
 
 		if err := config.SaveUserConfig(&userConfigCopy); err != nil {

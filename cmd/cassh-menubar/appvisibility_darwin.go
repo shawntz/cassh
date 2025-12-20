@@ -62,6 +62,10 @@ func handleShowInDockToggle() {
 		cfgMutex.Lock()
 		cfg.User.ShowInDock = false
 		userConfigCopy := cfg.User
+		// Deep copy Connections slice to avoid sharing underlying array
+		if len(userConfigCopy.Connections) > 0 {
+			userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+		}
 		cfgMutex.Unlock()
 
 		// Save preference
@@ -75,6 +79,10 @@ func handleShowInDockToggle() {
 		cfgMutex.Lock()
 		cfg.User.ShowInDock = true
 		userConfigCopy := cfg.User
+		// Deep copy Connections slice to avoid sharing underlying array
+		if len(userConfigCopy.Connections) > 0 {
+			userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
+		}
 		cfgMutex.Unlock()
 
 		// Save preference

@@ -79,6 +79,17 @@ type ConnectionStatus struct {
 	NotifiedExpired    bool
 }
 
+// deepCopyUserConfig creates a deep copy of UserConfig to avoid sharing the Connections slice
+// This prevents race conditions when saving config after releasing the mutex
+func deepCopyUserConfig(src config.UserConfig) config.UserConfig {
+	dst := src
+	if len(src.Connections) > 0 {
+		dst.Connections = make([]config.Connection, len(src.Connections))
+		copy(dst.Connections, src.Connections)
+	}
+	return dst
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting cassh-menubar...")
@@ -142,7 +153,7 @@ func main() {
 		if conn := config.CreateEnterpriseConnectionFromPolicy(&cfg.Policy); conn != nil {
 			cfgMutex.Lock()
 			cfg.User.AddConnection(*conn)
-			userConfigCopy := cfg.User
+			userConfigCopy := deepCopyUserConfig(cfg.User)
 			cfgMutex.Unlock()
 
 			// Save the connection
@@ -496,16 +507,19 @@ func refreshKeyForConnection(conn *config.Connection) {
 		return
 	}
 
+	// Lock before rotating the key since rotatePersonalGitHubSSH modifies the connection
+	cfgMutex.Lock()
+
 	// Rotate the key (delete old, generate new, upload new)
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
+		cfgMutex.Unlock()
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
 		return
 	}
 
 	// Save updated connection config with new key ID and timestamp
-	cfgMutex.Lock()
-	userConfigCopy := cfg.User
+	userConfigCopy := deepCopyUserConfig(cfg.User)
 	cfgMutex.Unlock()
 
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
@@ -1688,7 +1702,7 @@ func handleAddEnterprise(w http.ResponseWriter, r *http.Request) {
 		// Add connection to config
 		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		userConfigCopy := cfg.User
+		userConfigCopy := deepCopyUserConfig(cfg.User)
 		cfgMutex.Unlock()
 
 		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
@@ -1847,7 +1861,7 @@ func handleAddPersonal(w http.ResponseWriter, r *http.Request) {
 		// Add connection to config
 		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		userConfigCopy := cfg.User
+		userConfigCopy := deepCopyUserConfig(cfg.User)
 		cfgMutex.Unlock()
 
 		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
@@ -1967,7 +1981,7 @@ func handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
 		// Update config
 		cfgMutex.Lock()
 		cfg.User.Connections = newConnections
-		userConfigCopy := cfg.User
+		userConfigCopy := deepCopyUserConfig(cfg.User)
 		cfgMutex.Unlock()
 
 		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
@@ -2331,7 +2345,7 @@ func checkAndRotateExpiredKeys() {
 			rotatedCount++
 		}
 	}
-	userConfigCopy := cfg.User
+	userConfigCopy := deepCopyUserConfig(cfg.User)
 	cfgMutex.Unlock()
 
 	// Save config if any keys were rotated
