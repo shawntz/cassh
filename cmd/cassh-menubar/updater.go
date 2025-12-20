@@ -134,8 +134,9 @@ func checkForUpdatesWithUI() {
 }
 
 // performUpdateCheck performs the actual update check with interval validation
+// showNotification controls whether to show a notification if an update is found
 // Returns true if a check was performed, false if skipped due to interval
-func performUpdateCheck(source string) bool {
+func performUpdateCheck(source string, showNotification bool) bool {
 	// Check if update checks are disabled
 	configMutex.RLock()
 	updateCheckEnabled := cfg.User.UpdateCheckEnabled
@@ -202,8 +203,10 @@ func performUpdateCheck(source string) bool {
 			return true
 		}
 
-		// Show persistent notification
-		showUpdateNotification(latestVersion, release)
+		// Show notification if requested
+		if showNotification {
+			showUpdateNotification(latestVersion, release)
+		}
 	} else {
 		updateStatus = UpdateStatusUpToDate
 		if menuDismissUpdate != nil {
@@ -219,7 +222,8 @@ func performUpdateCheck(source string) bool {
 func checkForUpdatesBackground() {
 	// Wait a bit before checking to not slow down startup
 	time.Sleep(5 * time.Second)
-	performUpdateCheck("background")
+	// Background check always shows notification on first check
+	performUpdateCheck("background", true)
 }
 
 // startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
@@ -253,6 +257,7 @@ func startPeriodicUpdateChecker() {
 			// Check if updates were disabled since last check
 			configMutex.RLock()
 			updateCheckEnabled := cfg.User.UpdateCheckEnabled
+			notifyPersistent := cfg.User.UpdateNotifyPersistent
 			configMutex.RUnlock()
 
 			if !updateCheckEnabled {
@@ -261,7 +266,8 @@ func startPeriodicUpdateChecker() {
 			}
 
 			// Use the same update check logic with interval validation
-			performUpdateCheck("periodic")
+			// Only show notification if persistent notifications are enabled
+			performUpdateCheck("periodic", notifyPersistent)
 		}
 	}()
 }
