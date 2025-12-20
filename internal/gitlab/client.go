@@ -84,10 +84,8 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, fmt.Errorf("failed to list SSH keys: unexpected status code %d", resp.StatusCode)
 	}
-
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
