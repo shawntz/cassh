@@ -334,17 +334,13 @@ func startPersistentUpdateNotifier() {
 				dismissedVersion != latestVersion &&
 				notifyPersistent {
 
-				// Check if we've sent a notification recently
-				if time.Since(lastNotificationTime) >= notifyInterval {
-					currentVersion := normalizeVersion(version)
-					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
-					sendNativeNotification(
-						"cassh Update Available",
-						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-						"update-available",
-					)
-					lastNotificationTime = time.Now()
-				}
+				currentVersion := normalizeVersion(version)
+				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
+				sendNativeNotification(
+					"cassh Update Available",
+					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+					"update-available",
+				)
 			}
 		}
 	}()
