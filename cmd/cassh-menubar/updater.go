@@ -326,10 +326,13 @@ func sendNativeNotification(title, message, identifier string) {
 	}
 }
 
-// escapeForAppleScript escapes quotes and backslashes for AppleScript
+// escapeForAppleScript escapes quotes, backslashes, and control chars for AppleScript
 func escapeForAppleScript(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")
+	// Replace newline and carriage return characters with a visible \n sequence
+	s = strings.ReplaceAll(s, "\r", "\\n")
+	s = strings.ReplaceAll(s, "\n", "\\n")
 	return s
 }
 
