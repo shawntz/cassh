@@ -110,6 +110,8 @@ jobs:
   test-macos:
     name: Test macOS Menubar
     runs-on: macos-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
