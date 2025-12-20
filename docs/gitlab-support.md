@@ -363,10 +363,10 @@ If you want to use GitLab support today, you can:
    username = "yourusername"
    ssh_key_path = "~/.ssh/cassh_gitlab_id_ed25519"
    key_rotation_hours = 168
-   gitlab_token = "your-gitlab-personal-access-token-here"
+   gitlab_token = "<YOUR_GITLAB_PERSONAL_ACCESS_TOKEN>"
    ```
    
-   > **Security Note:** Replace `your-gitlab-personal-access-token-here` with your actual GitLab Personal Access Token. Keep this file secure and never commit it to version control.
+   > **Security Note:** Replace `<YOUR_GITLAB_PERSONAL_ACCESS_TOKEN>` with your actual GitLab Personal Access Token. Keep this file secure and never commit it to version control.
 
 2. **Manually generate and upload the SSH key**:
    ```bash
