@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func TestDefaultUserConfig(t *testing.T) {
@@ -414,5 +416,176 @@ func TestLoadUserConfigNonExistent(t *testing.T) {
 	// Should have default values
 	if config.RefreshIntervalSeconds != 30 {
 		t.Errorf("RefreshIntervalSeconds = %d, want 30 (default)", config.RefreshIntervalSeconds)
+	}
+}
+
+func TestLoadUserConfigWithDeprecatedFields(t *testing.T) {
+	// Create temp config file with deprecated GitHub-only fields
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	configContent := `
+refresh_interval_seconds = 30
+notification_sound = true
+preferred_meme = "lsp"
+
+[[connections]]
+id = "test-connection"
+name = "Test GitHub"
+type = "enterprise"
+github_host = "github.example.com"
+github_username = "test_user"
+server_url = "https://cassh.example.com"
+ssh_key_path = "/home/user/.ssh/test_key"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	// Read the config
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("Failed to read test config: %v", err)
+	}
+
+	config := DefaultUserConfig()
+	if err := toml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("Failed to parse test config: %v", err)
+	}
+
+	// Migrate deprecated fields (simulating what LoadUserConfig does)
+	for i := range config.Connections {
+		config.Connections[i].MigrateDeprecatedFields()
+	}
+
+	// Verify migration happened
+	if len(config.Connections) != 1 {
+		t.Fatalf("Expected 1 connection, got %d", len(config.Connections))
+	}
+
+	conn := config.Connections[0]
+
+	// Check that deprecated fields were migrated to new fields
+	if conn.Host != "github.example.com" {
+		t.Errorf("Host = %q, want %q (migrated from github_host)", conn.Host, "github.example.com")
+	}
+
+	if conn.Username != "test_user" {
+		t.Errorf("Username = %q, want %q (migrated from github_username)", conn.Username, "test_user")
+	}
+
+	// Check that platform defaults to GitHub for backwards compatibility
+	if conn.Platform != PlatformGitHub {
+		t.Errorf("Platform = %q, want %q (default for backwards compat)", conn.Platform, PlatformGitHub)
+	}
+
+	// Deprecated fields should still be present (not deleted)
+	if conn.GitHubHost != "github.example.com" {
+		t.Errorf("GitHubHost = %q, want %q (should be preserved)", conn.GitHubHost, "github.example.com")
+	}
+
+	if conn.GitHubUsername != "test_user" {
+		t.Errorf("GitHubUsername = %q, want %q (should be preserved)", conn.GitHubUsername, "test_user")
+	}
+}
+
+func TestMigrateDeprecatedFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    Connection
+		expected Connection
+	}{
+		{
+			name: "Migrate github_host and github_username",
+			input: Connection{
+				ID:             "test1",
+				GitHubHost:     "github.corp.com",
+				GitHubUsername: "user123",
+			},
+			expected: Connection{
+				ID:             "test1",
+				Platform:       PlatformGitHub,
+				Host:           "github.corp.com",
+				Username:       "user123",
+				GitHubHost:     "github.corp.com",
+				GitHubUsername: "user123",
+			},
+		},
+		{
+			name: "Empty platform defaults to GitHub",
+			input: Connection{
+				ID:       "test2",
+				Host:     "github.com",
+				Username: "user456",
+			},
+			expected: Connection{
+				ID:       "test2",
+				Platform: PlatformGitHub,
+				Host:     "github.com",
+				Username: "user456",
+			},
+		},
+		{
+			name: "New fields take precedence over deprecated fields",
+			input: Connection{
+				ID:             "test3",
+				Platform:       PlatformGitLab,
+				Host:           "gitlab.com",
+				Username:       "gitlab_user",
+				GitHubHost:     "github.com",
+				GitHubUsername: "github_user",
+			},
+			expected: Connection{
+				ID:             "test3",
+				Platform:       PlatformGitLab,
+				Host:           "gitlab.com",
+				Username:       "gitlab_user",
+				GitHubHost:     "github.com",
+				GitHubUsername: "github_user",
+			},
+		},
+		{
+			name: "Already migrated connection unchanged",
+			input: Connection{
+				ID:       "test4",
+				Platform: PlatformGitHub,
+				Host:     "github.enterprise.com",
+				Username: "enterprise_user",
+			},
+			expected: Connection{
+				ID:       "test4",
+				Platform: PlatformGitHub,
+				Host:     "github.enterprise.com",
+				Username: "enterprise_user",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conn := tt.input
+			conn.MigrateDeprecatedFields()
+
+			if conn.Platform != tt.expected.Platform {
+				t.Errorf("Platform = %q, want %q", conn.Platform, tt.expected.Platform)
+			}
+
+			if conn.Host != tt.expected.Host {
+				t.Errorf("Host = %q, want %q", conn.Host, tt.expected.Host)
+			}
+
+			if conn.Username != tt.expected.Username {
+				t.Errorf("Username = %q, want %q", conn.Username, tt.expected.Username)
+			}
+
+			// Deprecated fields should remain unchanged
+			if conn.GitHubHost != tt.expected.GitHubHost {
+				t.Errorf("GitHubHost = %q, want %q", conn.GitHubHost, tt.expected.GitHubHost)
+			}
+
+			if conn.GitHubUsername != tt.expected.GitHubUsername {
+				t.Errorf("GitHubUsername = %q, want %q", conn.GitHubUsername, tt.expected.GitHubUsername)
+			}
+		})
 	}
 }

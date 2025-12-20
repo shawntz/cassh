@@ -500,6 +500,11 @@ func LoadUserConfig() (*UserConfig, error) {
 			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
 		}
 
+		// Migrate deprecated fields for backwards compatibility
+		for i := range config.Connections {
+			config.Connections[i].MigrateDeprecatedFields()
+		}
+
 		// Mark that we're using dotfiles config
 		config.usingDotfiles = true
 		return &config, nil
@@ -525,6 +530,11 @@ func LoadUserConfig() (*UserConfig, error) {
 	config := DefaultUserConfig() // Start with defaults
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse user config: %w", err)
+	}
+
+	// Migrate deprecated fields for backwards compatibility
+	for i := range config.Connections {
+		config.Connections[i].MigrateDeprecatedFields()
 	}
 
 	return &config, nil
