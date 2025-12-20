@@ -27,7 +27,7 @@ When a new version is available:
 
 1. **Menu Bar Indicator**: Shows "🔔 Update Available: vX.Y.Z"
 2. **Native Notification**: macOS notification appears with version info
-3. **Persistent Reminders**: If you don't update, periodic reminders are sent (default: every 6 hours)
+3. **Persistent Reminders**: If you don't update, periodic reminders are sent (default: approximately every 12 hours)
 4. **Dismissal**: You can dismiss notifications for a specific version
 
 ### Menu Actions
@@ -209,7 +209,7 @@ display notification "Version X is available..."
 ```
 
 Notifications appear in:
-- Notification Center (can be clicked to action)
+- Notification Center (informational; clicking will not trigger actions in cassh)
 - Banner (top-right corner, auto-dismiss)
 - Lock screen (if enabled in System Preferences)
 
