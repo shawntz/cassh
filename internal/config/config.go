@@ -154,6 +154,20 @@ func (u *UserConfig) RemoveConnection(id string) bool {
 	return false
 }
 
+// Validate checks that user config values are valid and safe to use
+func (u *UserConfig) Validate() error {
+	if u.UpdateCheckIntervalDays < 0 {
+		return fmt.Errorf("update_check_interval_days must be non-negative, got %d", u.UpdateCheckIntervalDays)
+	}
+	if u.UpdateNotifyIntervalMin < 0 {
+		return fmt.Errorf("update_notify_interval_min must be non-negative, got %d", u.UpdateNotifyIntervalMin)
+	}
+	if u.RefreshIntervalSeconds < 0 {
+		return fmt.Errorf("refresh_interval_seconds must be non-negative, got %d", u.RefreshIntervalSeconds)
+	}
+	return nil
+}
+
 // MergedConfig is the final runtime config
 type MergedConfig struct {
 	Policy PolicyConfig
@@ -393,6 +407,11 @@ func LoadUserConfig() (*UserConfig, error) {
 			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
 		}
 
+		// Validate config values
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid dotfiles config: %w", err)
+		}
+
 		// Mark that we're using dotfiles config
 		config.usingDotfiles = true
 		return &config, nil
@@ -420,12 +439,22 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to parse user config: %w", err)
 	}
 
+	// Validate config values
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid user config: %w", err)
+	}
+
 	return &config, nil
 }
 
 // SaveUserConfig persists user prefs
 // Always saves to dotfiles location (~/.config/cassh/config.toml) for easy backup
 func SaveUserConfig(config *UserConfig) error {
+	// Validate config before saving
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
 	// Always use dotfiles location for new saves - it's user-friendly and backup-friendly
 	configPath := DotfilesConfigPath()
 
@@ -449,6 +478,11 @@ func SaveUserConfig(config *UserConfig) error {
 // SaveUserConfigToDotfiles saves config to the dotfiles location (~/.config/cassh/config.toml)
 // This can be used to migrate config to the dotfiles location
 func SaveUserConfigToDotfiles(config *UserConfig) error {
+	// Validate config before saving
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
 	configPath := DotfilesConfigPath()
 
 	// Ensure dir exists
