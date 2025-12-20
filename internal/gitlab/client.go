@@ -127,7 +127,10 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to create SSH key: couldn't read response body: %w", readErr)
+	}
 
 	if resp.StatusCode != http.StatusCreated {
 		// Check if key already exists (handle only relevant error status codes)
