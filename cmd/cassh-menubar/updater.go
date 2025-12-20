@@ -58,11 +58,10 @@ func getUpdateCheckInterval() time.Duration {
 	intervalDays := cfg.User.UpdateCheckIntervalDays
 	configMutex.RUnlock()
 
-	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
 	if intervalDays == 0 {
-		checkInterval = 24 * time.Hour // Default to daily
+		return 24 * time.Hour // Default to daily
 	}
-	return checkInterval
+	return time.Duration(intervalDays) * 24 * time.Hour
 }
 
 // getNotificationInterval returns the notification interval with default fallback
@@ -71,11 +70,10 @@ func getNotificationInterval() time.Duration {
 	intervalMin := cfg.User.UpdateNotifyIntervalMin
 	configMutex.RUnlock()
 
-	notifyInterval := time.Duration(intervalMin) * time.Minute
 	if intervalMin == 0 {
-		notifyInterval = 6 * time.Hour // Default to 6 hours
+		return 6 * time.Hour // Default to 6 hours
 	}
-	return notifyInterval
+	return time.Duration(intervalMin) * time.Minute
 }
 
 // setupUpdateMenu adds the update menu items
