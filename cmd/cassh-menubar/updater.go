@@ -43,12 +43,11 @@ const (
 )
 
 var (
-	menuCheckUpdates       *systray.MenuItem
-	menuDismissUpdate      *systray.MenuItem
-	latestVersion          string
-	updateStatus           UpdateStatus
-	lastNotificationTime   time.Time
-	updateNotificationSent bool
+	menuCheckUpdates     *systray.MenuItem
+	menuDismissUpdate    *systray.MenuItem
+	latestVersion        string
+	updateStatus         UpdateStatus
+	lastNotificationTime time.Time
 	configMutex            sync.RWMutex // Protects concurrent access to cfg.User fields
 )
 
