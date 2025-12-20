@@ -155,8 +155,9 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusCreated {
+		sanitizedMsg := sanitizeErrorMessage(body)
 		// Check if key already exists
-		if strings.Contains(string(body), "has already been taken") {
+		if strings.Contains(sanitizedMsg, "has already been taken") || strings.Contains(sanitizedMsg, "already been taken") {
 			// Try to find the existing key
 			existingKey, err := c.GetSSHKeyByTitle(title)
 			if err != nil {
@@ -166,7 +167,7 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 				return existingKey, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
+		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", sanitizedMsg, resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -229,12 +230,12 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err != nil {
-		// If parsing fails, try to extract manually
+	if err != nil || parsed.Hostname() == "" {
+		// If parsing fails or no hostname, try to extract manually
 		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
 		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
 		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
 		return gitlabURL
 	}
-	return parsed.Host
+	return parsed.Hostname()
 }
