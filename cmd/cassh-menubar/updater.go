@@ -290,7 +290,7 @@ func startPersistentUpdateNotifier() {
 					sendNotificationWithCategory(
 						"cassh Update Available",
 						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-						"GENERAL",
+						"UPDATE_AVAILABLE",
 					)
 					lastNotificationTime = time.Now()
 				}
@@ -307,7 +307,7 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
-		"GENERAL",
+		"UPDATE_AVAILABLE",
 	)
 
 	lastNotificationTime = time.Now()
