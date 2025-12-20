@@ -362,18 +362,18 @@ func startPersistentUpdateNotifier() {
 
 			updateStateMutex.RLock()
 			status := updateStatus
-			version := latestVersion
+			latestVer := latestVersion
 			updateStateMutex.RUnlock()
 
 			if status == UpdateStatusAvailable &&
-				dismissedVersion != version &&
+				dismissedVersion != latestVer &&
 				notifyPersistent {
 
 				currentVersion := normalizeVersion(version)
-				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, version)
+				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVer)
 				sendNativeNotification(
 					"cassh Update Available",
-					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", version, currentVersion),
+					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVer, currentVersion),
 					"update-available",
 				)
 			}
