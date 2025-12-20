@@ -321,7 +321,6 @@ The configuration supports backwards compatibility:
 
 **Manual Usage:**
 - ✅ You can manually configure GitLab connections in `~/.config/cassh/config.toml`
-- ✅ You can use the `cassh-cli` tool for GitLab SSH key management (when implemented)
 - ✅ Server-side certificate signing works for GitLab Enterprise (OIDC flow)
 
 ### 🚧 Not Yet Implemented
@@ -390,7 +389,7 @@ For GitLab Enterprise with certificates, the server-side infrastructure is ready
 
 ### 📊 Implementation Status
 
-For detailed implementation status and developer notes, see [GITLAB_IMPLEMENTATION_STATUS.md](../GITLAB_IMPLEMENTATION_STATUS.md) in the repository root.
+For detailed implementation status and developer notes, see [GITLAB_IMPLEMENTATION_STATUS.md](/GITLAB_IMPLEMENTATION_STATUS.md) in the repository root.
 
 ## GitLab Resources
 
