@@ -45,12 +45,12 @@ const (
 var (
 	menuCheckUpdates       *systray.MenuItem
 	menuDismissUpdate      *systray.MenuItem
-	latestVersion          string
-	updateStatus           UpdateStatus
-	lastNotificationTime   time.Time
-	updateNotificationSent bool
-	configMutex            sync.RWMutex // Protects concurrent access to cfg.User fields
-	updateStateMutex       sync.RWMutex // Protects concurrent access to update state variables
+	latestVersion          string                // Protected by updateStateMutex
+	updateStatus           UpdateStatus          // Protected by updateStateMutex
+	lastNotificationTime   time.Time             // Protected by updateStateMutex
+	updateNotificationSent bool                  // Protected by updateStateMutex
+	configMutex            sync.RWMutex          // Protects concurrent access to cfg.User fields
+	updateStateMutex       sync.RWMutex          // Protects concurrent access to update state variables
 )
 
 // setupUpdateMenu adds the update menu items
@@ -116,12 +116,10 @@ func checkForUpdatesWithUI() {
 	}
 
 	newLatestVersion := normalizeVersion(release.TagName)
-	updateStateMutex.Lock()
-	latestVersion = newLatestVersion
-	updateStateMutex.Unlock()
 
 	if isNewerVersion(newLatestVersion, currentVersion) {
 		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusAvailable
 		updateStateMutex.Unlock()
 		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
@@ -136,6 +134,7 @@ func checkForUpdatesWithUI() {
 		}
 	} else {
 		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusUpToDate
 		updateStateMutex.Unlock()
 		menuCheckUpdates.SetTitle("Check for Updates...")
@@ -194,9 +193,6 @@ func checkForUpdatesBackground() {
 	}
 
 	newLatestVersion := normalizeVersion(release.TagName)
-	updateStateMutex.Lock()
-	latestVersion = newLatestVersion
-	updateStateMutex.Unlock()
 	currentVersion := normalizeVersion(version)
 
 	// Update last check time
@@ -209,6 +205,7 @@ func checkForUpdatesBackground() {
 
 	if isNewerVersion(newLatestVersion, currentVersion) {
 		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusAvailable
 		updateStateMutex.Unlock()
 		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
@@ -231,6 +228,7 @@ func checkForUpdatesBackground() {
 		showUpdateNotification(newLatestVersion, release)
 	} else {
 		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusUpToDate
 		updateStateMutex.Unlock()
 		if menuDismissUpdate != nil {
@@ -284,9 +282,6 @@ func startPeriodicUpdateChecker() {
 			}
 
 			newLatestVersion := normalizeVersion(release.TagName)
-			updateStateMutex.Lock()
-			latestVersion = newLatestVersion
-			updateStateMutex.Unlock()
 			currentVersion := normalizeVersion(version)
 
 			// Update last check time
@@ -304,6 +299,7 @@ func startPeriodicUpdateChecker() {
 
 				if dismissedVersion != newLatestVersion {
 					updateStateMutex.Lock()
+					latestVersion = newLatestVersion
 					updateStatus = UpdateStatusAvailable
 					updateStateMutex.Unlock()
 					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
