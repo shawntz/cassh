@@ -209,7 +209,7 @@ display notification "Version X is available..."
 ```
 
 Notifications appear in:
-- Notification Center (can be clicked to action)
+- Notification Center (informational; clicking will not trigger actions in cassh)
 - Banner (top-right corner, auto-dismiss)
 - Lock screen (if enabled in System Preferences)
 
