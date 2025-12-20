@@ -349,7 +349,7 @@ func dismissUpdate() {
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
 		}
-		showNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion))
+		sendNativeNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion))
 	}
 }
 
