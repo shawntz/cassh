@@ -379,7 +379,12 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 		config.GitHubEnterpriseURL = v
 	}
 	if v := os.Getenv("CASSH_PLATFORM"); v != "" {
-		config.Platform = v
+		platform := strings.ToLower(v)
+		if platform == "github" || platform == "gitlab" {
+			config.Platform = platform
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: invalid CASSH_PLATFORM value %q; expected \"github\" or \"gitlab\". Keeping existing platform configuration.\n", v)
+		}
 	}
 	if v := os.Getenv("CASSH_GITHUB_PRINCIPAL_SOURCE"); v != "" {
 		config.GitHubPrincipalSource = v
