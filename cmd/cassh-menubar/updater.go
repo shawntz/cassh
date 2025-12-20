@@ -339,7 +339,6 @@ func startPersistentUpdateNotifier() {
 				sendNativeNotification(
 					"cassh Update Available",
 					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-					"update-available",
 				)
 			}
 		}
@@ -354,7 +353,6 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNativeNotification(
 		"cassh Update Available",
 		message,
-		"update-available",
 	)
 
 	lastNotificationTime = time.Now()
@@ -362,7 +360,7 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 }
 
 // sendNativeNotification sends a macOS User Notification
-func sendNativeNotification(title, message, identifier string) {
+func sendNativeNotification(title, message string) {
 	script := fmt.Sprintf(`
 		display notification "%s" with title "%s" sound name "default"
 	`, escapeForAppleScript(message), escapeForAppleScript(title))
