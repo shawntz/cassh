@@ -209,7 +209,7 @@ func startPeriodicUpdateChecker() {
 		// Initial check after startup
 		checkForUpdatesBackground()
 
-		// Set up periodic checks
+		// Set up periodic checks with dynamic config reloading
 		checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
 		if cfg.User.UpdateCheckIntervalDays == 0 {
 			checkInterval = 24 * time.Hour
@@ -218,10 +218,36 @@ func startPeriodicUpdateChecker() {
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
 
+		// Track current interval to detect changes
+		currentIntervalDays := cfg.User.UpdateCheckIntervalDays
+
 		for range ticker.C {
 			if !cfg.User.UpdateCheckEnabled {
 				log.Printf("Update checks disabled, stopping periodic checker")
 				return
+			}
+
+			// Reload config to check for interval changes
+			userCfg, err := config.LoadUserConfig()
+			if err == nil {
+				// Check if the interval has changed
+				if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
+					newInterval := time.Duration(userCfg.UpdateCheckIntervalDays) * 24 * time.Hour
+					if userCfg.UpdateCheckIntervalDays == 0 {
+						newInterval = 24 * time.Hour
+					}
+
+					log.Printf("Update check interval changed from %d to %d days, recreating ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
+					currentIntervalDays = userCfg.UpdateCheckIntervalDays
+					cfg.User.UpdateCheckIntervalDays = userCfg.UpdateCheckIntervalDays
+
+					// Recreate ticker with new interval
+					ticker.Stop()
+					ticker = time.NewTicker(newInterval)
+				}
+
+				// Update global config with reloaded values
+				cfg.User = *userCfg
 			}
 
 			release, err := fetchLatestRelease()
