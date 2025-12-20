@@ -101,8 +101,8 @@ func (ca *CertificateAuthority) SignPublicKeyForGitHub(userPubKey ssh.PublicKey,
 }
 
 // SignPublicKeyForGitLab signs a user's public key with GitLab-specific extensions
-// The gitlabHost should be the GitLab hostname (e.g., "gitlab.yourcompany.com") or empty for gitlab.com
-// The gitlabUsername is the user's GitLab username for the login extension
+// gitlabHost should be the GitLab hostname (e.g., "gitlab.yourcompany.com") or empty for gitlab.com
+// gitlabUsername is the user's GitLab username for the login extension
 func (ca *CertificateAuthority) SignPublicKeyForGitLab(userPubKey ssh.PublicKey, keyID string, gitlabUsername string, gitlabHost string) (*ssh.Certificate, error) {
 	// Generate random serial
 	serialBytes := make([]byte, 8)
