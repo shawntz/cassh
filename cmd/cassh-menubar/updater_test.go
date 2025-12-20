@@ -212,9 +212,13 @@ func TestEscapeForAppleScript(t *testing.T) {
 }
 
 func TestDismissUpdate(t *testing.T) {
-	// Save original config
+	// Save original config and version
 	origCfg := cfg
-	defer func() { cfg = origCfg }()
+	origVersion := latestVersion
+	defer func() {
+		cfg = origCfg
+		latestVersion = origVersion
+	}()
 
 	// Create a test config
 	cfg = config.Config{
@@ -238,9 +242,13 @@ func TestDismissUpdate(t *testing.T) {
 }
 
 func TestDismissUpdateEmptyVersion(t *testing.T) {
-	// Save original config
+	// Save original config and version
 	origCfg := cfg
-	defer func() { cfg = origCfg }()
+	origVersion := latestVersion
+	defer func() {
+		cfg = origCfg
+		latestVersion = origVersion
+	}()
 
 	// Create a test config
 	cfg = config.Config{
@@ -364,6 +372,26 @@ func TestConfigMutexProtection(t *testing.T) {
 	configMutex.RUnlock()
 }
 
+// calculateUpdateCheckInterval returns the update check interval based on configured days
+// This matches the logic in startPeriodicUpdateChecker
+func calculateUpdateCheckInterval(intervalDays int) time.Duration {
+	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
+	if intervalDays == 0 {
+		checkInterval = 24 * time.Hour // Default to daily
+	}
+	return checkInterval
+}
+
+// calculateNotifyInterval returns the notification interval based on configured minutes
+// This matches the logic in startPersistentUpdateNotifier
+func calculateNotifyInterval(intervalMin int) time.Duration {
+	notifyInterval := time.Duration(intervalMin) * time.Minute
+	if intervalMin == 0 {
+		notifyInterval = 6 * time.Hour // Default to 6 hours
+	}
+	return notifyInterval
+}
+
 // TestPeriodicUpdateCheckerConfiguration tests the configuration logic
 // without actually starting the background goroutine
 func TestPeriodicUpdateCheckerConfiguration(t *testing.T) {
@@ -420,11 +448,8 @@ func TestPeriodicUpdateCheckerConfiguration(t *testing.T) {
 				t.Errorf("UpdateCheckIntervalDays = %d, want %d", interval, tt.intervalDays)
 			}
 
-			// Calculate expected interval
-			checkInterval := time.Duration(interval) * 24 * time.Hour
-			if interval == 0 {
-				checkInterval = 24 * time.Hour
-			}
+			// Calculate expected interval using helper function
+			checkInterval := calculateUpdateCheckInterval(interval)
 
 			if checkInterval != tt.expectedInterval {
 				t.Errorf("Calculated interval = %v, want %v", checkInterval, tt.expectedInterval)
@@ -489,11 +514,8 @@ func TestPersistentNotifierConfiguration(t *testing.T) {
 				t.Errorf("UpdateNotifyIntervalMin = %d, want %d", interval, tt.intervalMin)
 			}
 
-			// Calculate expected interval
-			notifyInterval := time.Duration(interval) * time.Minute
-			if interval == 0 {
-				notifyInterval = 6 * time.Hour
-			}
+			// Calculate expected interval using helper function
+			notifyInterval := calculateNotifyInterval(interval)
 
 			if notifyInterval != tt.expectedInterval {
 				t.Errorf("Calculated interval = %v, want %v", notifyInterval, tt.expectedInterval)
@@ -524,6 +546,7 @@ func TestConcurrentConfigAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				configMutex.RLock()
+				// Read config values to test concurrent access patterns
 				_ = cfg.User.UpdateCheckEnabled
 				_ = cfg.User.DismissedUpdateVersion
 				configMutex.RUnlock()
