@@ -2,6 +2,11 @@
 
 package main
 
+// dockicon_darwin.go handles Dock icon clicks on macOS.
+// When the user clicks the Dock icon (and the app is set to "Show in Dock"),
+// this opens the settings/setup window. This provides a convenient way to
+// access the app's settings without having to use the menu bar icon.
+
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa
