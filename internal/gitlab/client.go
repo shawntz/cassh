@@ -172,7 +172,10 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
 		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
@@ -188,7 +191,10 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
 		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
