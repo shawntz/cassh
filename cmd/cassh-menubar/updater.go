@@ -151,11 +151,13 @@ func checkForUpdatesBackground() {
 	// Check if we should check for updates based on interval
 	configMutex.RLock()
 	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
-	checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
-	if cfg.User.UpdateCheckIntervalDays == 0 {
+	intervalDays := cfg.User.UpdateCheckIntervalDays
+	configMutex.RUnlock()
+
+	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
+	if intervalDays == 0 {
 		checkInterval = 24 * time.Hour // Default to daily
 	}
-	configMutex.RUnlock()
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
@@ -229,11 +231,13 @@ func startPeriodicUpdateChecker() {
 
 		// Set up periodic checks
 		configMutex.RLock()
-		checkInterval := time.Duration(cfg.User.UpdateCheckIntervalDays) * 24 * time.Hour
-		if cfg.User.UpdateCheckIntervalDays == 0 {
+		intervalDays := cfg.User.UpdateCheckIntervalDays
+		configMutex.RUnlock()
+
+		checkInterval := time.Duration(intervalDays) * 24 * time.Hour
+		if intervalDays == 0 {
 			checkInterval = 24 * time.Hour
 		}
-		configMutex.RUnlock()
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
@@ -300,14 +304,19 @@ func startPeriodicUpdateChecker() {
 func startPersistentUpdateNotifier() {
 	configMutex.RLock()
 	notifyPersistent := cfg.User.UpdateNotifyPersistent
-	notifyInterval := time.Duration(cfg.User.UpdateNotifyIntervalMin) * time.Minute
-	if cfg.User.UpdateNotifyIntervalMin == 0 {
-		notifyInterval = 6 * time.Hour // Default to 6 hours
-	}
 	configMutex.RUnlock()
 
 	if !notifyPersistent {
 		return
+	}
+
+	configMutex.RLock()
+	intervalMin := cfg.User.UpdateNotifyIntervalMin
+	configMutex.RUnlock()
+
+	notifyInterval := time.Duration(intervalMin) * time.Minute
+	if intervalMin == 0 {
+		notifyInterval = 6 * time.Hour // Default to 6 hours
 	}
 
 	go func() {
