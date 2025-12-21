@@ -51,6 +51,30 @@ var (
 	configMutex            sync.RWMutex // Protects concurrent access to cfg.User fields
 )
 
+// getUpdateCheckInterval returns the update check interval with default fallback
+func getUpdateCheckInterval() time.Duration {
+	configMutex.RLock()
+	intervalDays := cfg.User.UpdateCheckIntervalDays
+	configMutex.RUnlock()
+
+	if intervalDays == 0 {
+		return 24 * time.Hour // Default to daily
+	}
+	return time.Duration(intervalDays) * 24 * time.Hour
+}
+
+// getNotificationInterval returns the notification interval with default fallback
+func getNotificationInterval() time.Duration {
+	configMutex.RLock()
+	intervalMin := cfg.User.UpdateNotifyIntervalMin
+	configMutex.RUnlock()
+
+	if intervalMin == 0 {
+		return 6 * time.Hour // Default to 6 hours
+	}
+	return time.Duration(intervalMin) * time.Minute
+}
+
 // setupUpdateMenu adds the update menu items
 func setupUpdateMenu() (*systray.MenuItem, *systray.MenuItem) {
 	menuCheckUpdates = systray.AddMenuItem("Check for Updates...", "Check for new versions")
@@ -326,10 +350,7 @@ func startPersistentUpdateNotifier() {
 		return
 	}
 
-	notifyInterval := time.Duration(notifyIntervalMin) * time.Minute
-	if notifyIntervalMin == 0 {
-		notifyInterval = 6 * time.Hour // Default to 6 hours
-	}
+	notifyInterval := getNotificationInterval()
 
 	go func() {
 		ticker := time.NewTicker(notifyInterval)
