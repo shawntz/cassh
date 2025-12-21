@@ -20,10 +20,10 @@ type Client struct {
 
 // SSHKey represents a GitLab SSH key
 type SSHKey struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Key       string    `json:"key"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Key       string     `json:"key"`
+	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
@@ -199,8 +199,11 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
+		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	return nil
@@ -215,8 +218,11 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("failed to read response body")
+		}
+		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	var user map[string]interface{}
