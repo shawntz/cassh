@@ -229,23 +229,25 @@ func startPeriodicUpdateChecker() {
 			userCfg, err := config.LoadUserConfig()
 			if err != nil {
 				log.Printf("Failed to reload config for update check: %v", err)
-			} else {
-				// Check if update checks have been disabled via config
-				if !userCfg.UpdateCheckEnabled {
-					log.Printf("Update checks disabled via config, stopping periodic checker")
-					return
-				}
+				// Skip this iteration if we can't reload config
+				continue
+			}
 
-				// Check if the interval has changed
-				if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
-					newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
+			// Check if update checks have been disabled via config
+			if !userCfg.UpdateCheckEnabled {
+				log.Printf("Update checks disabled via config, stopping periodic checker")
+				return
+			}
 
-					log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
-					currentIntervalDays = userCfg.UpdateCheckIntervalDays
+			// Check if the interval has changed
+			if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
+				newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
 
-					// Reset ticker with new interval (no memory leak, same ticker instance)
-					ticker.Reset(newInterval)
-				}
+				log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
+				currentIntervalDays = userCfg.UpdateCheckIntervalDays
+
+				// Reset ticker with new interval (no memory leak, same ticker instance)
+				ticker.Reset(newInterval)
 			}
 
 			release, err := fetchLatestRelease()
@@ -257,14 +259,14 @@ func startPeriodicUpdateChecker() {
 			latestVersion = normalizeVersion(release.TagName)
 			currentVersion := normalizeVersion(version)
 
-			// Update last check time
-			cfg.User.LastUpdateCheckTime = time.Now().Unix()
-			if err := config.SaveUserConfig(&cfg.User); err != nil {
+			// Update last check time in reloaded config
+			userCfg.LastUpdateCheckTime = time.Now().Unix()
+			if err := config.SaveUserConfig(userCfg); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
 
 			if isNewerVersion(latestVersion, currentVersion) {
-				if cfg.User.DismissedUpdateVersion != latestVersion {
+				if userCfg.DismissedUpdateVersion != latestVersion {
 					updateStatus = UpdateStatusAvailable
 					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
 					if menuDismissUpdate != nil {
@@ -273,7 +275,7 @@ func startPeriodicUpdateChecker() {
 					log.Printf("Update available (periodic check): %s -> %s", currentVersion, latestVersion)
 
 					// Show notification if persistent notifications are enabled
-					if cfg.User.UpdateNotifyPersistent {
+					if userCfg.UpdateNotifyPersistent {
 						showUpdateNotification(latestVersion, release)
 					}
 				}
