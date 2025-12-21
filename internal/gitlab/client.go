@@ -84,7 +84,8 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to list SSH keys: unexpected status code %d", resp.StatusCode)
+		// Don't include response body in error to avoid leaking sensitive information
+		return nil, fmt.Errorf("failed to list SSH keys: HTTP %d", resp.StatusCode)
 	}
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
@@ -129,25 +130,23 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return nil, fmt.Errorf("failed to create SSH key: couldn't read response body: %w", readErr)
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		// Check if key already exists (handle only relevant error status codes)
-		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict {
-			bodyStr := strings.ToLower(string(body))
-			if strings.Contains(bodyStr, "has already been taken") || strings.Contains(bodyStr, "already exists") {
-				// Try to find the existing key
-				existingKey, err := c.GetSSHKeyByTitle(title)
-				if err != nil {
-					return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
-				}
-				if existingKey != nil {
-					return existingKey, nil
-				}
+		// Check if key already exists (without exposing response body in error)
+		if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "has already been taken") {
+			// Try to find the existing key
+			existingKey, err := c.GetSSHKeyByTitle(title)
+			if err != nil {
+				return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
+			}
+			if existingKey != nil {
+				return existingKey, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		// Don't include response body in error to avoid leaking sensitive information
+		return nil, fmt.Errorf("failed to create SSH key: HTTP %d", resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -172,8 +171,8 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		// Don't include response body in error to avoid leaking sensitive information
+		return fmt.Errorf("failed to delete SSH key: HTTP %d", resp.StatusCode)
 	}
 
 	return nil
@@ -188,8 +187,8 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
+		// Don't include response body in error to avoid leaking sensitive information
+		return nil, fmt.Errorf("failed to get user info: HTTP %d", resp.StatusCode)
 	}
 
 	var user map[string]interface{}
