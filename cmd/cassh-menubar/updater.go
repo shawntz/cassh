@@ -132,6 +132,19 @@ func checkForUpdatesWithUI() {
 	}
 }
 
+// getUpdateCheckInterval returns the configured update check interval or default (24 hours)
+func getUpdateCheckInterval() time.Duration {
+	configMutex.RLock()
+	intervalDays := cfg.User.UpdateCheckIntervalDays
+	configMutex.RUnlock()
+
+	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
+	if intervalDays == 0 {
+		checkInterval = 24 * time.Hour // Default to daily
+	}
+	return checkInterval
+}
+
 // checkForUpdatesBackground silently checks for updates on startup
 func checkForUpdatesBackground() {
 	// Wait a bit before checking to not slow down startup
@@ -150,10 +163,11 @@ func checkForUpdatesBackground() {
 	}
 
 	// Check if we should check for updates based on interval
-	checkInterval := time.Duration(checkIntervalDays) * 24 * time.Hour
-	if checkIntervalDays == 0 {
-		checkInterval = 24 * time.Hour // Default to daily
-	}
+	configMutex.RLock()
+	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
+	configMutex.RUnlock()
+
+	checkInterval := getUpdateCheckInterval()
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
@@ -234,10 +248,7 @@ func startPeriodicUpdateChecker() {
 		checkForUpdatesBackground()
 
 		// Set up periodic checks
-		checkInterval := time.Duration(checkIntervalDays) * 24 * time.Hour
-		if checkIntervalDays == 0 {
-			checkInterval = 24 * time.Hour
-		}
+		checkInterval := getUpdateCheckInterval()
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
