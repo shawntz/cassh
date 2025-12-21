@@ -175,9 +175,7 @@ func performUpdateCheck(source string, showNotification bool) bool {
 	// Check if we should check for updates based on interval
 	configMutex.RLock()
 	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
-	configMutex.RUnlock()
-
-	checkInterval := getUpdateCheckInterval()
+	checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
@@ -254,6 +252,15 @@ func checkForUpdatesBackground() {
 	performUpdateCheck("background", true)
 }
 
+// calculateCheckInterval returns the check interval duration based on configured days
+// If days is 0, defaults to 24 hours (daily)
+func calculateCheckInterval(days int) time.Duration {
+	if days == 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
 // startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
 func startPeriodicUpdateChecker() {
 	cfgMutex.RLock()
@@ -269,27 +276,75 @@ func startPeriodicUpdateChecker() {
 		// Initial check after startup
 		checkForUpdatesBackground()
 
-		// Set up periodic checks
-		checkInterval := getUpdateCheckInterval()
+		// Set up periodic checks with dynamic config reloading
+		checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			// Check if updates were disabled since last check
-			configMutex.RLock()
-			updateCheckEnabled := cfg.User.UpdateCheckEnabled
-			notifyPersistent := cfg.User.UpdateNotifyPersistent
-			configMutex.RUnlock()
+		// Track current interval to detect changes
+		currentIntervalDays := cfg.User.UpdateCheckIntervalDays
 
-			if !enabled {
-				log.Printf("Update checks disabled, stopping periodic checker")
+		for range ticker.C {
+			// Reload config to check for interval changes and enabled state
+			userCfg, err := config.LoadUserConfig()
+			if err != nil {
+				log.Printf("Failed to reload config for update check: %v", err)
+				// Skip this iteration if we can't reload config
+				continue
+			}
+
+			// Check if update checks have been disabled via config
+			if !userCfg.UpdateCheckEnabled {
+				log.Printf("Update checks disabled via config, stopping periodic checker")
 				return
 			}
 
-			// Use the same update check logic with interval validation
-			// Only show notification if persistent notifications are enabled
-			performUpdateCheck("periodic", notifyPersistent)
+			// Check if the interval has changed
+			if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
+				newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
+
+				log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
+				currentIntervalDays = userCfg.UpdateCheckIntervalDays
+
+				// Reset ticker with new interval (no memory leak, same ticker instance)
+				ticker.Reset(newInterval)
+			}
+
+			release, err := fetchLatestRelease()
+			if err != nil {
+				log.Printf("Periodic update check failed: %v", err)
+				continue
+			}
+
+			latestVersion = normalizeVersion(release.TagName)
+			currentVersion := normalizeVersion(version)
+
+			// Update last check time in reloaded config
+			userCfg.LastUpdateCheckTime = time.Now().Unix()
+			if err := config.SaveUserConfig(userCfg); err != nil {
+				log.Printf("Failed to save config after periodic update check: %v", err)
+			}
+
+			if isNewerVersion(latestVersion, currentVersion) {
+				if userCfg.DismissedUpdateVersion != latestVersion {
+					updateStatus = UpdateStatusAvailable
+					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+					if menuDismissUpdate != nil {
+						menuDismissUpdate.Show()
+					}
+					log.Printf("Update available (periodic check): %s -> %s", currentVersion, latestVersion)
+
+					// Show notification if persistent notifications are enabled
+					if userCfg.UpdateNotifyPersistent {
+						showUpdateNotification(latestVersion, release)
+					}
+				}
+			} else {
+				if menuDismissUpdate != nil {
+					menuDismissUpdate.Hide()
+				}
+			}
 		}
 	}()
 }
