@@ -43,19 +43,21 @@ const (
 )
 
 var (
-	menuCheckUpdates     *systray.MenuItem
-	menuDismissUpdate    *systray.MenuItem
-	latestVersion        string
-	updateStatus         UpdateStatus
-	lastNotificationTime time.Time
-	configMutex            sync.RWMutex // Protects concurrent access to cfg.User fields
+	menuCheckUpdates       *systray.MenuItem
+	menuDismissUpdate      *systray.MenuItem
+	latestVersion          string                // Protected by updateStateMutex
+	updateStatus           UpdateStatus          // Protected by updateStateMutex
+	lastNotificationTime   time.Time             // Protected by updateStateMutex
+	updateNotificationSent bool                  // Protected by updateStateMutex
+	cfgMutex               sync.RWMutex          // Protects concurrent access to cfg.User fields
+	updateStateMutex       sync.RWMutex          // Protects concurrent access to update state variables
 )
 
 // getUpdateCheckInterval returns the update check interval with default fallback
 func getUpdateCheckInterval() time.Duration {
-	configMutex.RLock()
+	cfgMutex.RLock()
 	intervalDays := cfg.User.UpdateCheckIntervalDays
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	if intervalDays == 0 {
 		return 24 * time.Hour // Default to daily
@@ -65,9 +67,9 @@ func getUpdateCheckInterval() time.Duration {
 
 // getNotificationInterval returns the notification interval with default fallback
 func getNotificationInterval() time.Duration {
-	configMutex.RLock()
+	cfgMutex.RLock()
 	intervalMin := cfg.User.UpdateNotifyIntervalMin
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	if intervalMin == 0 {
 		return 6 * time.Hour // Default to 6 hours
@@ -85,7 +87,11 @@ func setupUpdateMenu() (*systray.MenuItem, *systray.MenuItem) {
 
 // handleUpdateMenuClick handles clicks on the update menu item
 func handleUpdateMenuClick() {
-	switch updateStatus {
+	updateStateMutex.RLock()
+	status := updateStatus
+	updateStateMutex.RUnlock()
+
+	switch status {
 	case UpdateStatusAvailable:
 		// Open releases page directly if update is available
 		openBrowser(releasesPageURL)
@@ -112,7 +118,9 @@ func checkForUpdatesWithUI() {
 		// Check if it's a 404 (no releases yet)
 		if strings.Contains(err.Error(), "404") {
 			log.Printf("No releases found yet - you're on the latest version")
+			updateStateMutex.Lock()
 			updateStatus = UpdateStatusNoReleases
+			updateStateMutex.Unlock()
 			menuCheckUpdates.SetTitle("Check for Updates...")
 			menuCheckUpdates.Enable()
 			// Show dialog
@@ -123,28 +131,36 @@ func checkForUpdatesWithUI() {
 		log.Printf("Failed to check for updates: %v", err)
 		menuCheckUpdates.SetTitle("Check for Updates...")
 		menuCheckUpdates.Enable()
+		updateStateMutex.Lock()
 		updateStatus = UpdateStatusError
+		updateStateMutex.Unlock()
 		// Show error dialog
 		showUpdateDialog("Update Check Failed", "Could not check for updates.\nPlease check your internet connection.")
 		return
 	}
 
-	latestVersion = normalizeVersion(release.TagName)
+	newLatestVersion := normalizeVersion(release.TagName)
 
-	if isNewerVersion(latestVersion, currentVersion) {
+	if isNewerVersion(newLatestVersion, currentVersion) {
+		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusAvailable
-		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+		updateStateMutex.Unlock()
+		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Show()
 		}
 		menuCheckUpdates.Enable()
-		log.Printf("Update available: %s -> %s", currentVersion, latestVersion)
+		log.Printf("Update available: %s -> %s", currentVersion, newLatestVersion)
 		// Show update available dialog
-		if showUpdateAvailableDialog(latestVersion) {
+		if showUpdateAvailableDialog(newLatestVersion) {
 			openBrowser(releasesPageURL)
 		}
 	} else {
+		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusUpToDate
+		updateStateMutex.Unlock()
 		menuCheckUpdates.SetTitle("Check for Updates...")
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
@@ -156,10 +172,11 @@ func checkForUpdatesWithUI() {
 	}
 }
 
-// performUpdateCheck performs the actual update check with interval validation
-// showNotification controls whether to show a notification if an update is found
-// Returns true if a check was performed, false if skipped due to interval
-func performUpdateCheck(source string, showNotification bool) bool {
+// checkForUpdatesBackground silently checks for updates on startup
+func checkForUpdatesBackground() {
+	// Wait a bit before checking to not slow down startup
+	time.Sleep(5 * time.Second)
+
 	// Check if update checks are disabled
 	cfgMutex.RLock()
 	updateCheckEnabled := cfg.User.UpdateCheckEnabled
@@ -173,9 +190,11 @@ func performUpdateCheck(source string, showNotification bool) bool {
 	}
 
 	// Check if we should check for updates based on interval
-	configMutex.RLock()
+	cfgMutex.RLock()
 	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
-	checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
+	cfgMutex.RUnlock()
+
+	checkInterval := getUpdateCheckInterval()
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
@@ -185,15 +204,17 @@ func performUpdateCheck(source string, showNotification bool) bool {
 	release, err := fetchLatestRelease()
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
-			log.Printf("No releases found yet (%s check)", source)
+			log.Printf("No releases found yet (background check)")
+			updateStateMutex.Lock()
 			updateStatus = UpdateStatusNoReleases
+			updateStateMutex.Unlock()
 		} else {
 			log.Printf("%s update check failed: %v", source, err)
 		}
 		return false
 	}
 
-	latestVersion = normalizeVersion(release.TagName)
+	newLatestVersion := normalizeVersion(release.TagName)
 	currentVersion := normalizeVersion(version)
 
 	// Update last check time
@@ -209,32 +230,35 @@ func performUpdateCheck(source string, showNotification bool) bool {
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after update check: %v", err)
 	}
-	configMutex.Unlock()
 
-	if isNewerVersion(latestVersion, currentVersion) {
+	if isNewerVersion(newLatestVersion, currentVersion) {
+		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusAvailable
-		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+		updateStateMutex.Unlock()
+		menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Show()
 		}
-		log.Printf("Update available (%s check): %s -> %s", source, currentVersion, latestVersion)
+		log.Printf("Update available (background check): %s -> %s", currentVersion, newLatestVersion)
 
 		// Check if user dismissed this version
 		cfgMutex.RLock()
 		dismissedVersion := cfg.User.DismissedUpdateVersion
 		cfgMutex.RUnlock()
 
-		if dismissedVersion == latestVersion {
-			log.Printf("User dismissed update v%s, skipping notification", latestVersion)
-			return true
+		if dismissedVersion == newLatestVersion {
+			log.Printf("User dismissed update v%s, skipping notification", newLatestVersion)
+			return
 		}
 
-		// Show notification if requested
-		if showNotification {
-			showUpdateNotification(latestVersion, release)
-		}
+		// Show persistent notification
+		showUpdateNotification(newLatestVersion, release)
 	} else {
+		updateStateMutex.Lock()
+		latestVersion = newLatestVersion
 		updateStatus = UpdateStatusUpToDate
+		updateStateMutex.Unlock()
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
 		}
@@ -317,7 +341,7 @@ func startPeriodicUpdateChecker() {
 				continue
 			}
 
-			latestVersion = normalizeVersion(release.TagName)
+			newLatestVersion := normalizeVersion(release.TagName)
 			currentVersion := normalizeVersion(version)
 
 			// Update last check time in reloaded config
@@ -325,19 +349,28 @@ func startPeriodicUpdateChecker() {
 			if err := config.SaveUserConfig(userCfg); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
+			cfgMutex.Unlock()
 
-			if isNewerVersion(latestVersion, currentVersion) {
-				if userCfg.DismissedUpdateVersion != latestVersion {
+			if isNewerVersion(newLatestVersion, currentVersion) {
+				cfgMutex.RLock()
+				dismissedVersion := cfg.User.DismissedUpdateVersion
+				notifyPersistent := cfg.User.UpdateNotifyPersistent
+				cfgMutex.RUnlock()
+
+				if dismissedVersion != newLatestVersion {
+					updateStateMutex.Lock()
+					latestVersion = newLatestVersion
 					updateStatus = UpdateStatusAvailable
-					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
+					updateStateMutex.Unlock()
+					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", newLatestVersion))
 					if menuDismissUpdate != nil {
 						menuDismissUpdate.Show()
 					}
-					log.Printf("Update available (periodic check): %s -> %s", currentVersion, latestVersion)
+					log.Printf("Update available (periodic check): %s -> %s", currentVersion, newLatestVersion)
 
 					// Show notification if persistent notifications are enabled
-					if userCfg.UpdateNotifyPersistent {
-						showUpdateNotification(latestVersion, release)
+					if notifyPersistent {
+						showUpdateNotification(newLatestVersion, release)
 					}
 				}
 			} else {
@@ -367,26 +400,27 @@ func startPersistentUpdateNotifier() {
 		defer ticker.Stop()
 
 		for range ticker.C {
+			// Only notify if update is available and not dismissed
 			cfgMutex.RLock()
 			dismissedVersion := cfg.User.DismissedUpdateVersion
-			persistent := cfg.User.UpdateNotifyPersistent
+			notifyPersistent := cfg.User.UpdateNotifyPersistent
 			cfgMutex.RUnlock()
 
-			// Only notify if update is available and not dismissed
-			configMutex.RLock()
-			dismissedVersion := cfg.User.DismissedUpdateVersion
-			notifyPersistent := cfg.User.UpdateNotifyPersistent
-			configMutex.RUnlock()
+			updateStateMutex.RLock()
+			status := updateStatus
+			latestVer := latestVersion
+			updateStateMutex.RUnlock()
 
-			if updateStatus == UpdateStatusAvailable &&
-				dismissedVersion != latestVersion &&
+			if status == UpdateStatusAvailable &&
+				dismissedVersion != latestVer &&
 				notifyPersistent {
 
 				currentVersion := normalizeVersion(version)
-				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
-				sendNativeNotification(
+				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVer)
+				sendNotificationWithCategory(
 					"cassh Update Available",
-					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVer, currentVersion),
+					"UPDATE_AVAILABLE",
 				)
 			}
 		}
@@ -401,10 +435,13 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
+		"UPDATE_AVAILABLE",
 	)
 
+	updateStateMutex.Lock()
 	lastNotificationTime = time.Now()
 	updateNotificationSent = true
+	updateStateMutex.Unlock()
 }
 
 // sendNativeNotification sends a macOS User Notification
@@ -438,7 +475,11 @@ func escapeForAppleScript(s string) string {
 
 // dismissUpdate marks the current update version as dismissed
 func dismissUpdate() {
-	if latestVersion == "" {
+	updateStateMutex.RLock()
+	currentLatestVersion := latestVersion
+	updateStateMutex.RUnlock()
+
+	if currentLatestVersion == "" {
 		return
 	}
 
@@ -454,15 +495,17 @@ func dismissUpdate() {
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save dismissed update version: %v", err)
 	} else {
-		log.Printf("Dismissed update v%s", latestVersion)
+		log.Printf("Dismissed update v%s", currentLatestVersion)
+		updateStateMutex.Lock()
 		updateStatus = UpdateStatusUpToDate
+		updateStateMutex.Unlock()
 		menuCheckUpdates.SetTitle("Check for Updates...")
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Hide()
 		}
-		sendNotificationWithCategory("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", latestVersion), "GENERAL")
+		sendNativeNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", currentLatestVersion))
 	}
-	configMutex.Unlock()
+	cfgMutex.Unlock()
 }
 
 // clearDismissedUpdate clears the dismissed update version (called when manually checking for updates)
@@ -483,7 +526,6 @@ func clearDismissedUpdate() {
 	} else {
 		cfgMutex.Unlock()
 	}
-	configMutex.Unlock()
 }
 
 // fetchLatestRelease fetches the latest release from GitHub API
