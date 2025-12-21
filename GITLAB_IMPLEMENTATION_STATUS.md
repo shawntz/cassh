@@ -121,7 +121,10 @@ func generateSSHKeyForGitLabPersonal(conn *config.Connection) error {
 #### 5.3 SSH Key Upload to GitLab (new function)
 ```go
 func uploadSSHKeyToGitLab(conn *config.Connection, keyPath string, title string) (int, error) {
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return 0, err
+    }
     pubKeyPath := keyPath + ".pub"
     pubKeyData, err := os.ReadFile(pubKeyPath)
     // ...
@@ -133,7 +136,10 @@ func uploadSSHKeyToGitLab(conn *config.Connection, keyPath string, title string)
 #### 5.4 SSH Key Deletion from GitLab (new function)
 ```go
 func deleteSSHKeyFromGitLab(conn *config.Connection, keyID int) error {
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return err
+    }
     return client.DeleteSSHKey(keyID)
 }
 ```
@@ -214,7 +220,11 @@ func updateConnectionStatus(connIdx int) {
             // Existing GitHub logic
         } else if conn.IsGitLab() {
             // Check if token is valid
-            client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+            client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+            if err != nil {
+                setConnectionStatusInvalid(connIdx, "Invalid GitLab token", true)
+                return
+            }
             if err := client.ValidateToken(); err != nil {
                 setConnectionStatusInvalid(connIdx, "Invalid GitLab token", true)
                 return
@@ -278,7 +288,10 @@ func getGitLabUsername(conn *config.Connection) string {
     }
 
     // Try to get from API
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return ""
+    }
     user, err := client.GetCurrentUser()
     if err != nil {
         return ""

@@ -30,7 +30,12 @@ type SSHKey struct {
 // NewClient creates a new GitLab API client
 // baseURL should be the GitLab instance URL (e.g., "https://gitlab.com" or "https://gitlab.company.com")
 // token is a personal access token with `api` scope
-func NewClient(baseURL, token string) *Client {
+func NewClient(baseURL, token string) (*Client, error) {
+	// Validate token is not empty
+	if token == "" {
+		return nil, fmt.Errorf("token cannot be empty")
+	}
+
 	// Remove trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
@@ -40,7 +45,7 @@ func NewClient(baseURL, token string) *Client {
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-	}
+	}, nil
 }
 
 // sanitizeErrorMessage extracts a safe error message from the response body

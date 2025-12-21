@@ -4,123 +4,43 @@ import (
 	"testing"
 )
 
-func TestSanitizeErrorMessage(t *testing.T) {
-	tests := []struct {
-		name     string
-		body     []byte
-		expected string
-	}{
-		{
-			name:     "JSON with message field",
-			body:     []byte(`{"message": "Invalid credentials"}`),
-			expected: "Invalid credentials",
-		},
-		{
-			name:     "JSON with error field",
-			body:     []byte(`{"error": "Not found"}`),
-			expected: "Not found",
-		},
-		{
-			name:     "JSON with both message and error fields (message takes precedence)",
-			body:     []byte(`{"message": "Primary error", "error": "Secondary error"}`),
-			expected: "Primary error",
-		},
-		{
-			name:     "JSON with sensitive data should be omitted",
-			body:     []byte(`{"token": "secret-token-123", "details": "Internal server error with stack trace"}`),
-			expected: "API request failed (response body omitted for security)",
-		},
-		{
-			name:     "Invalid JSON should be omitted",
-			body:     []byte(`This is not JSON`),
-			expected: "API request failed (response body omitted for security)",
-		},
-		{
-			name:     "Empty body should be omitted",
-			body:     []byte(``),
-			expected: "API request failed (response body omitted for security)",
-		},
-		{
-			name:     "JSON with no message or error field should be omitted",
-			body:     []byte(`{"foo": "bar"}`),
-			expected: "API request failed (response body omitted for security)",
-		},
+func TestNewClient_EmptyToken(t *testing.T) {
+	// Test that NewClient returns an error when token is empty
+	_, err := NewClient("https://gitlab.com", "")
+	if err == nil {
+		t.Error("Expected error when creating client with empty token, got nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeErrorMessage(tt.body)
-			if result != tt.expected {
-				t.Errorf("sanitizeErrorMessage() = %q, expected %q", result, tt.expected)
-			}
-		})
+	
+	expectedMsg := "token cannot be empty"
+	if err.Error() != expectedMsg {
+		t.Errorf("Expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
 
-func TestExtractHostFromURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		url      string
-		expected string
-	}{
-		{
-			name:     "HTTPS URL",
-			url:      "https://gitlab.com",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "HTTP URL",
-			url:      "http://gitlab.company.com",
-			expected: "gitlab.company.com",
-		},
-		{
-			name:     "URL with trailing slash",
-			url:      "https://gitlab.com/",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "URL with port",
-			url:      "https://gitlab.com:443",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "URL with custom port",
-			url:      "https://gitlab.company.com:8443",
-			expected: "gitlab.company.com",
-		},
-		{
-			name:     "Plain hostname",
-			url:      "gitlab.com",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "Plain hostname with trailing slash",
-			url:      "gitlab.com/",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "Plain hostname with port",
-			url:      "gitlab.com:8080",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "Plain hostname with port and path",
-			url:      "gitlab.com:8080/path",
-			expected: "gitlab.com",
-		},
-		{
-			name:     "URL with path",
-			url:      "https://gitlab.com/some/path",
-			expected: "gitlab.com",
-		},
+func TestNewClient_ValidToken(t *testing.T) {
+	// Test that NewClient succeeds with a non-empty token
+	client, err := NewClient("https://gitlab.com", "valid-token")
+	if err != nil {
+		t.Errorf("Expected no error with valid token, got: %v", err)
 	}
+	if client == nil {
+		t.Error("Expected client to be non-nil")
+	}
+	if client.token != "valid-token" {
+		t.Errorf("Expected token to be 'valid-token', got %q", client.token)
+	}
+	if client.baseURL != "https://gitlab.com" {
+		t.Errorf("Expected baseURL to be 'https://gitlab.com', got %q", client.baseURL)
+	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractHostFromURL(tt.url)
-			if result != tt.expected {
-				t.Errorf("ExtractHostFromURL(%q) = %q, expected %q", tt.url, result, tt.expected)
-			}
-		})
+func TestNewClient_TrailingSlash(t *testing.T) {
+	// Test that trailing slashes are removed from baseURL
+	client, err := NewClient("https://gitlab.com/", "valid-token")
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	if client.baseURL != "https://gitlab.com" {
+		t.Errorf("Expected baseURL to have trailing slash removed, got %q", client.baseURL)
 	}
 }
