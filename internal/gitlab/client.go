@@ -43,6 +43,29 @@ func NewClient(baseURL, token string) *Client {
 	}
 }
 
+// sanitizeErrorMessage extracts a safe error message from the response body
+// without exposing potentially sensitive information
+func sanitizeErrorMessage(body []byte) string {
+	// Try to parse as JSON and extract only the message field
+	var errResponse struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	
+	if err := json.Unmarshal(body, &errResponse); err == nil {
+		if errResponse.Message != "" {
+			return errResponse.Message
+		}
+		if errResponse.Error != "" {
+			return errResponse.Error
+		}
+	}
+	
+	// If we can't parse the JSON or there's no message field,
+	// return a generic error message to avoid exposing sensitive data
+	return "API request failed (response body omitted for security)"
+}
+
 // doRequest performs an HTTP request with authentication
 func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Response, error) {
 	var reqBody io.Reader
@@ -84,8 +107,8 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Don't include response body in error to avoid leaking sensitive information
-		return nil, fmt.Errorf("failed to list SSH keys: HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
@@ -134,8 +157,9 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		// Check if key already exists (without exposing response body in error)
-		if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "has already been taken") {
+		sanitizedMsg := sanitizeErrorMessage(body)
+		// Check if key already exists
+		if strings.Contains(sanitizedMsg, "has already been taken") {
 			// Try to find the existing key
 			existingKey, err := c.GetSSHKeyByTitle(title)
 			if err != nil {
@@ -145,8 +169,7 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 				return existingKey, nil
 			}
 		}
-		// Don't include response body in error to avoid leaking sensitive information
-		return nil, fmt.Errorf("failed to create SSH key: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", sanitizedMsg, resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -171,8 +194,8 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		// Don't include response body in error to avoid leaking sensitive information
-		return fmt.Errorf("failed to delete SSH key: HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	return nil
@@ -187,8 +210,8 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Don't include response body in error to avoid leaking sensitive information
-		return nil, fmt.Errorf("failed to get user info: HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
 
 	var user map[string]interface{}
@@ -209,31 +232,20 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err == nil && parsed.Hostname() != "" {
-		// Use the parsed hostname, which excludes any port.
-		return parsed.Hostname()
+	if err != nil || parsed.Hostname() == "" {
+		// If parsing fails or no hostname, try to extract manually
+		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
+		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
+		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
+		// Remove port if present
+		if idx := strings.Index(gitlabURL, ":"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		// Remove path if present
+		if idx := strings.Index(gitlabURL, "/"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		return gitlabURL
 	}
-
-	// If parsing fails or no hostname is found, try to extract manually.
-	if err != nil {
-		fmt.Printf("warning: failed to parse GitLab URL %q: %v\n", gitlabURL, err)
-	}
-
-	host := strings.TrimPrefix(gitlabURL, "https://")
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimPrefix(host, "//")
-	host = strings.TrimSpace(host)
-	host = strings.TrimSuffix(host, "/")
-
-	// Remove any path component.
-	if idx := strings.Index(host, "/"); idx != -1 {
-		host = host[:idx]
-	}
-
-	// Remove any port component.
-	if idx := strings.Index(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
-
-	return host
+	return parsed.Hostname()
 }
