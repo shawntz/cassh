@@ -2,6 +2,8 @@
 
 cassh now supports both GitHub and GitLab, in both personal and enterprise modes.
 
+> **⚠️ WORK IN PROGRESS**: GitLab support is currently under active development. Core functionality is implemented, but UI integration is not yet complete. See [Known Limitations](#known-limitations) below for details.
+
 ## Overview
 
 GitLab support works the same way as GitHub support:
@@ -56,9 +58,10 @@ ssh_cert_path = "~/.ssh/cassh_gitlab_work_id_ed25519-cert.pub"
 
 1. Go to GitLab → Preferences → Access Tokens
 2. Create a new token with the following scopes:
-   - `api` (required for SSH key management)
-3. Copy the token and save it in your cassh config
+   - `api` (required for SSH key management; note that this scope grants full read/write access to the GitLab API according to your account permissions, not just SSH key operations)
+3. Copy the token and save it in your cassh config, storing it securely (for example, in an encrypted secrets store) and treating it as a high‑privilege credential
 
+> **Note:** GitLab currently exposes SSH key management only under the `api` scope. This is why cassh requires a token with `api` scope, even though this scope is broader than strictly necessary for SSH key management.
 ### How It Works
 
 1. **Key Generation**: cassh generates an Ed25519 SSH key
@@ -295,6 +298,100 @@ The configuration supports backwards compatibility:
 - Check OIDC configuration in server config
 - Verify redirect URL matches server URL
 - Check OIDC tenant/client ID/secret are correct
+
+## Known Limitations
+
+> **Current Status**: The GitLab backend infrastructure is complete, but UI integration is still in progress.
+
+### ✅ What's Working
+
+**API & Infrastructure:**
+- ✅ GitLab API client (`internal/gitlab/client.go`)
+  - SSH key listing, creation, deletion
+  - Token validation
+  - User info retrieval
+- ✅ Configuration support for GitLab connections
+  - Personal and enterprise mode configs
+  - Platform-agnostic connection management
+  - Backwards compatibility with GitHub-only configs
+- ✅ Certificate authority GitLab support
+  - GitLab-specific SSH certificate signing
+  - Proper certificate extensions for GitLab
+  - OIDC-derived principals
+
+**Manual Usage:**
+- ✅ You can manually configure GitLab connections in `~/.config/cassh/config.toml`
+- ✅ Server-side certificate signing works for GitLab Enterprise (OIDC flow)
+
+### 🚧 Not Yet Implemented
+
+**Menu Bar App:**
+- ❌ GitLab personal mode integration (SSH key upload/rotation)
+- ❌ GitLab connection status display in menu bar
+- ❌ "Refresh Key" action for GitLab personal connections
+- ❌ Automatic key rotation for GitLab personal mode
+- ❌ GitLab token validation in UI
+
+**Setup Wizard:**
+- ❌ "Personal GitLab" option in setup wizard
+- ❌ "Enterprise GitLab" option in setup wizard
+- ❌ GitLab token input and validation UI
+- ❌ GitLab URL parsing from clone URLs
+
+**Server:**
+- ❌ Platform detection from query parameters
+- ❌ GitLab-specific landing page branding
+- ❌ Multi-platform support in auth callback
+
+**Additional Features:**
+- ❌ GitLab SSH config auto-generation
+- ❌ GitLab git config management (includeIf directives)
+- ❌ Comprehensive test coverage for GitLab features
+
+### 📋 Workaround (Until UI is Complete)
+
+If you want to use GitLab support today, you can:
+
+1. **Manually create the connection** in `~/.config/cassh/config.toml`:
+   ```toml
+   [[connections]]
+   id = "personal-gitlab"
+   platform = "gitlab"
+   type = "personal"
+   name = "Personal GitLab"
+   host = "gitlab.com"
+   username = "yourusername"
+   ssh_key_path = "~/.ssh/cassh_gitlab_id_ed25519"
+   key_rotation_hours = 168
+   gitlab_token = "<YOUR_GITLAB_PERSONAL_ACCESS_TOKEN>"
+   ```
+   
+   > **Security Note:** Replace `<YOUR_GITLAB_PERSONAL_ACCESS_TOKEN>` with your actual GitLab Personal Access Token. Keep this file secure and never commit it to version control.
+
+2. **Manually generate and upload the SSH key**:
+   ```bash
+   # Generate key
+   ssh-keygen -t ed25519 -f ~/.ssh/cassh_gitlab_id_ed25519 -N ""
+   
+   # Upload to GitLab (via UI or CLI)
+   # GitLab UI: Settings → SSH Keys → Add new key
+   # Or use the GitLab API directly
+   ```
+
+3. **Manually configure SSH config** (`~/.ssh/config`):
+   ```ssh
+   Host gitlab.com
+       User git
+       HostName gitlab.com
+       IdentityFile ~/.ssh/cassh_gitlab_id_ed25519
+       IdentitiesOnly yes
+   ```
+
+For GitLab Enterprise with certificates, the server-side infrastructure is ready, but you'll need to manually initiate the OIDC flow until the UI integration is complete.
+
+### 📊 Implementation Status
+
+For detailed implementation status and developer notes, see [GITLAB_IMPLEMENTATION_STATUS.md](../GITLAB_IMPLEMENTATION_STATUS.md) in the repository root.
 
 ## GitLab Resources
 

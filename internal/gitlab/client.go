@@ -38,7 +38,7 @@ func NewClient(baseURL, token string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}
 }
@@ -77,8 +77,8 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	url := c.baseURL + endpoint
-	req, err := http.NewRequest(method, url, reqBody)
+	requestURL := c.baseURL + endpoint
+	req, err := http.NewRequest(method, requestURL, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -110,7 +110,6 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", sanitizeErrorMessage(body), resp.StatusCode)
 	}
-
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -152,7 +151,10 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", readErr)
+	}
 
 	if resp.StatusCode != http.StatusCreated {
 		sanitizedMsg := sanitizeErrorMessage(body)
