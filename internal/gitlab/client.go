@@ -38,7 +38,7 @@ func NewClient(baseURL, token string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}
 }
@@ -54,8 +54,8 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	url := c.baseURL + endpoint
-	req, err := http.NewRequest(method, url, reqBody)
+	requestURL := c.baseURL + endpoint
+	req, err := http.NewRequest(method, requestURL, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -87,7 +87,6 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 		// Don't include response body in error to avoid leaking sensitive information
 		return nil, fmt.Errorf("failed to list SSH keys: HTTP %d", resp.StatusCode)
 	}
-
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -210,12 +209,31 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err != nil {
-		// If parsing fails, try to extract manually
-		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
-		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
-		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
-		return gitlabURL
+	if err == nil && parsed.Hostname() != "" {
+		// Use the parsed hostname, which excludes any port.
+		return parsed.Hostname()
 	}
-	return parsed.Host
+
+	// If parsing fails or no hostname is found, try to extract manually.
+	if err != nil {
+		fmt.Printf("warning: failed to parse GitLab URL %q: %v\n", gitlabURL, err)
+	}
+
+	host := strings.TrimPrefix(gitlabURL, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "//")
+	host = strings.TrimSpace(host)
+	host = strings.TrimSuffix(host, "/")
+
+	// Remove any path component.
+	if idx := strings.Index(host, "/"); idx != -1 {
+		host = host[:idx]
+	}
+
+	// Remove any port component.
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+
+	return host
 }

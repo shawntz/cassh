@@ -135,12 +135,11 @@ func (ca *CertificateAuthority) SignPublicKeyForGitLab(userPubKey ssh.PublicKey,
 	// Format: login@HOSTNAME=USERNAME
 	// For gitlab.com: login@gitlab.com=username
 	// For GitLab Self-Managed: login@gitlab.yourcompany.com=username
+	host := "gitlab.com"
 	if gitlabHost != "" {
-		extensions[fmt.Sprintf("login@%s", gitlabHost)] = gitlabUsername
-	} else {
-		// Default to gitlab.com
-		extensions["login@gitlab.com"] = gitlabUsername
+		host = gitlabHost
 	}
+	extensions[fmt.Sprintf("login@%s", host)] = gitlabUsername
 
 	cert := &ssh.Certificate{
 		Key:             userPubKey,
