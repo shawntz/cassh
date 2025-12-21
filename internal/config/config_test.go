@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -416,3 +417,121 @@ func TestLoadUserConfigNonExistent(t *testing.T) {
 		t.Errorf("RefreshIntervalSeconds = %d, want 30 (default)", config.RefreshIntervalSeconds)
 	}
 }
+
+func TestUserConfigValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  UserConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "Valid config with defaults",
+			config:  DefaultUserConfig(),
+			wantErr: false,
+		},
+		{
+			name: "Valid config with zero values",
+			config: UserConfig{
+				UpdateCheckIntervalDays: 0,
+				UpdateNotifyIntervalMin: 0,
+				RefreshIntervalSeconds:  0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Negative UpdateCheckIntervalDays",
+			config: UserConfig{
+				UpdateCheckIntervalDays: -1,
+			},
+			wantErr: true,
+			errMsg:  "update_check_interval_days must be non-negative",
+		},
+		{
+			name: "Negative UpdateNotifyIntervalMin",
+			config: UserConfig{
+				UpdateNotifyIntervalMin: -5,
+			},
+			wantErr: true,
+			errMsg:  "update_notify_interval_min must be non-negative",
+		},
+		{
+			name: "Negative RefreshIntervalSeconds",
+			config: UserConfig{
+				RefreshIntervalSeconds: -10,
+			},
+			wantErr: true,
+			errMsg:  "refresh_interval_seconds must be non-negative",
+		},
+		{
+			name: "Valid config with large positive values",
+			config: UserConfig{
+				UpdateCheckIntervalDays: 365,
+				UpdateNotifyIntervalMin: 10080, // 1 week in minutes
+				RefreshIntervalSeconds:  3600,  // 1 hour
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want error containing %q", err.Error(), tt.errMsg)
+				}
+			}
+		})
+	}
+}
+
+func TestSaveUserConfigValidation(t *testing.T) {
+	// Test that SaveUserConfig rejects invalid configs
+	tmpDir := t.TempDir()
+	
+	// Temporarily change the home directory for this test
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+	
+	tests := []struct {
+		name    string
+		config  UserConfig
+		wantErr bool
+	}{
+		{
+			name:    "Valid config",
+			config:  DefaultUserConfig(),
+			wantErr: false,
+		},
+		{
+			name: "Invalid config - negative UpdateCheckIntervalDays",
+			config: UserConfig{
+				UpdateCheckIntervalDays: -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Invalid config - negative UpdateNotifyIntervalMin",
+			config: UserConfig{
+				UpdateNotifyIntervalMin: -5,
+			},
+			wantErr: true,
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := SaveUserConfig(&tt.config)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SaveUserConfig() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
