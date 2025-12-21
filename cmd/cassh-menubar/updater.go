@@ -156,24 +156,10 @@ func checkForUpdatesWithUI() {
 	}
 }
 
-// getUpdateCheckInterval returns the configured update check interval or default (24 hours)
-func getUpdateCheckInterval() time.Duration {
-	configMutex.RLock()
-	intervalDays := cfg.User.UpdateCheckIntervalDays
-	configMutex.RUnlock()
-
-	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
-	if intervalDays == 0 {
-		checkInterval = 24 * time.Hour // Default to daily
-	}
-	return checkInterval
-}
-
-// checkForUpdatesBackground silently checks for updates on startup
-func checkForUpdatesBackground() {
-	// Wait a bit before checking to not slow down startup
-	time.Sleep(5 * time.Second)
-
+// performUpdateCheck performs the actual update check with interval validation
+// showNotification controls whether to show a notification if an update is found
+// Returns true if a check was performed, false if skipped due to interval
+func performUpdateCheck(source string, showNotification bool) bool {
 	// Check if update checks are disabled
 	cfgMutex.RLock()
 	updateCheckEnabled := cfg.User.UpdateCheckEnabled
@@ -183,7 +169,7 @@ func checkForUpdatesBackground() {
 
 	if !updateCheckEnabled {
 		log.Printf("Update checks disabled by user")
-		return
+		return false
 	}
 
 	// Check if we should check for updates based on interval
@@ -195,18 +181,18 @@ func checkForUpdatesBackground() {
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
-		return
+		return false
 	}
 
 	release, err := fetchLatestRelease()
 	if err != nil {
 		if strings.Contains(err.Error(), "404") {
-			log.Printf("No releases found yet (background check)")
+			log.Printf("No releases found yet (%s check)", source)
 			updateStatus = UpdateStatusNoReleases
 		} else {
-			log.Printf("Background update check failed: %v", err)
+			log.Printf("%s update check failed: %v", source, err)
 		}
-		return
+		return false
 	}
 
 	latestVersion = normalizeVersion(release.TagName)
@@ -233,7 +219,7 @@ func checkForUpdatesBackground() {
 		if menuDismissUpdate != nil {
 			menuDismissUpdate.Show()
 		}
-		log.Printf("Update available (background check): %s -> %s", currentVersion, latestVersion)
+		log.Printf("Update available (%s check): %s -> %s", source, currentVersion, latestVersion)
 
 		// Check if user dismissed this version
 		cfgMutex.RLock()
@@ -242,11 +228,13 @@ func checkForUpdatesBackground() {
 
 		if dismissedVersion == latestVersion {
 			log.Printf("User dismissed update v%s, skipping notification", latestVersion)
-			return
+			return true
 		}
 
-		// Show persistent notification
-		showUpdateNotification(latestVersion, release)
+		// Show notification if requested
+		if showNotification {
+			showUpdateNotification(latestVersion, release)
+		}
 	} else {
 		updateStatus = UpdateStatusUpToDate
 		if menuDismissUpdate != nil {
@@ -254,6 +242,16 @@ func checkForUpdatesBackground() {
 		}
 		log.Printf("Already up to date: %s", currentVersion)
 	}
+
+	return true
+}
+
+// checkForUpdatesBackground silently checks for updates on startup
+func checkForUpdatesBackground() {
+	// Wait a bit before checking to not slow down startup
+	time.Sleep(5 * time.Second)
+	// Background check always shows notification on first check
+	performUpdateCheck("background", true)
 }
 
 // startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
@@ -278,63 +276,20 @@ func startPeriodicUpdateChecker() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			cfgMutex.RLock()
-			enabled := cfg.User.UpdateCheckEnabled
-			cfgMutex.RUnlock()
+			// Check if updates were disabled since last check
+			configMutex.RLock()
+			updateCheckEnabled := cfg.User.UpdateCheckEnabled
+			notifyPersistent := cfg.User.UpdateNotifyPersistent
+			configMutex.RUnlock()
 
 			if !enabled {
 				log.Printf("Update checks disabled, stopping periodic checker")
 				return
 			}
 
-			release, err := fetchLatestRelease()
-			if err != nil {
-				log.Printf("Periodic update check failed: %v", err)
-				continue
-			}
-
-			latestVersion = normalizeVersion(release.TagName)
-			currentVersion := normalizeVersion(version)
-
-			// Update last check time
-			cfgMutex.Lock()
-			cfg.User.LastUpdateCheckTime = time.Now().Unix()
-			userConfigCopy := cfg.User
-			// Deep copy Connections slice to avoid sharing underlying array
-			if len(userConfigCopy.Connections) > 0 {
-				userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
-			}
-			cfgMutex.Unlock()
-
-			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
-				log.Printf("Failed to save config after periodic update check: %v", err)
-			}
-			configMutex.Unlock()
-
-			if isNewerVersion(latestVersion, currentVersion) {
-				cfgMutex.RLock()
-				dismissedVersion := cfg.User.DismissedUpdateVersion
-				notifyPersistent := cfg.User.UpdateNotifyPersistent
-				cfgMutex.RUnlock()
-
-				if dismissedVersion != latestVersion {
-					updateStatus = UpdateStatusAvailable
-					menuCheckUpdates.SetTitle(fmt.Sprintf("🔔 Update Available: v%s", latestVersion))
-					if menuDismissUpdate != nil {
-						menuDismissUpdate.Show()
-					}
-					log.Printf("Update available (periodic check): %s -> %s", currentVersion, latestVersion)
-
-					// Show notification if persistent notifications are enabled
-					if notifyPersistent {
-						showUpdateNotification(latestVersion, release)
-					}
-				}
-			} else {
-				if menuDismissUpdate != nil {
-					menuDismissUpdate.Hide()
-				}
-			}
+			// Use the same update check logic with interval validation
+			// Only show notification if persistent notifications are enabled
+			performUpdateCheck("periodic", notifyPersistent)
 		}
 	}()
 }
