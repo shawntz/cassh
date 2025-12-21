@@ -235,6 +235,12 @@ func startPeriodicUpdateChecker() {
 			if err != nil {
 				log.Printf("Failed to reload config for update check: %v", err)
 			} else {
+				// Check if update checks have been disabled via config
+				if !userCfg.UpdateCheckEnabled {
+					log.Printf("Update checks disabled via config, stopping periodic checker")
+					return
+				}
+
 				// Check if the interval has changed
 				if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
 					newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
@@ -245,9 +251,6 @@ func startPeriodicUpdateChecker() {
 					// Reset ticker with new interval (no memory leak, same ticker instance)
 					ticker.Reset(newInterval)
 				}
-
-				// Update global config with reloaded values
-				cfg.User = *userCfg
 			}
 
 			release, err := fetchLatestRelease()
