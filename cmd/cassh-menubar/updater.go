@@ -49,15 +49,15 @@ var (
 	updateStatus           UpdateStatus          // Protected by updateStateMutex
 	lastNotificationTime   time.Time             // Protected by updateStateMutex
 	updateNotificationSent bool                  // Protected by updateStateMutex
-	configMutex            sync.RWMutex          // Protects concurrent access to cfg.User fields
+	cfgMutex               sync.RWMutex          // Protects concurrent access to cfg.User fields
 	updateStateMutex       sync.RWMutex          // Protects concurrent access to update state variables
 )
 
 // getUpdateCheckInterval returns the update check interval with default fallback
 func getUpdateCheckInterval() time.Duration {
-	configMutex.RLock()
+	cfgMutex.RLock()
 	intervalDays := cfg.User.UpdateCheckIntervalDays
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	if intervalDays == 0 {
 		return 24 * time.Hour // Default to daily
@@ -67,9 +67,9 @@ func getUpdateCheckInterval() time.Duration {
 
 // getNotificationInterval returns the notification interval with default fallback
 func getNotificationInterval() time.Duration {
-	configMutex.RLock()
+	cfgMutex.RLock()
 	intervalMin := cfg.User.UpdateNotifyIntervalMin
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	if intervalMin == 0 {
 		return 6 * time.Hour // Default to 6 hours
@@ -174,9 +174,9 @@ func checkForUpdatesWithUI() {
 
 // getUpdateCheckInterval returns the configured update check interval or default (24 hours)
 func getUpdateCheckInterval() time.Duration {
-	configMutex.RLock()
+	cfgMutex.RLock()
 	intervalDays := cfg.User.UpdateCheckIntervalDays
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
 	if intervalDays == 0 {
@@ -203,9 +203,9 @@ func checkForUpdatesBackground() {
 	}
 
 	// Check if we should check for updates based on interval
-	configMutex.RLock()
+	cfgMutex.RLock()
 	lastCheckTime := time.Unix(cfg.User.LastUpdateCheckTime, 0)
-	configMutex.RUnlock()
+	cfgMutex.RUnlock()
 
 	checkInterval := getUpdateCheckInterval()
 
@@ -243,7 +243,6 @@ func checkForUpdatesBackground() {
 	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after update check: %v", err)
 	}
-	configMutex.Unlock()
 
 	if isNewerVersion(newLatestVersion, currentVersion) {
 		updateStateMutex.Lock()
@@ -333,10 +332,10 @@ func startPeriodicUpdateChecker() {
 			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
-			configMutex.Unlock()
+			cfgMutex.Unlock()
 
 			if isNewerVersion(newLatestVersion, currentVersion) {
-				configMutex.RLock()
+				cfgMutex.RLock()
 				dismissedVersion := cfg.User.DismissedUpdateVersion
 				notifyPersistent := cfg.User.UpdateNotifyPersistent
 				cfgMutex.RUnlock()
@@ -390,10 +389,10 @@ func startPersistentUpdateNotifier() {
 			cfgMutex.RUnlock()
 
 			// Only notify if update is available and not dismissed
-			configMutex.RLock()
+			cfgMutex.RLock()
 			dismissedVersion := cfg.User.DismissedUpdateVersion
 			notifyPersistent := cfg.User.UpdateNotifyPersistent
-			configMutex.RUnlock()
+			cfgMutex.RUnlock()
 
 			updateStateMutex.RLock()
 			status := updateStatus
@@ -406,10 +405,10 @@ func startPersistentUpdateNotifier() {
 
 				currentVersion := normalizeVersion(version)
 				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVer)
-				sendNativeNotification(
+				sendNotificationWithCategory(
 					"cassh Update Available",
 					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVer, currentVersion),
-					"update-available",
+					"UPDATE_AVAILABLE",
 				)
 			}
 		}
@@ -424,6 +423,7 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
+		"UPDATE_AVAILABLE",
 	)
 
 	updateStateMutex.Lock()
@@ -486,7 +486,7 @@ func dismissUpdate() {
 		}
 		sendNativeNotification("Update Dismissed", fmt.Sprintf("You can check for updates again from the menu.\n\nDismissed version: v%s", currentLatestVersion))
 	}
-	configMutex.Unlock()
+	cfgMutex.Unlock()
 }
 
 // clearDismissedUpdate clears the dismissed update version (called when manually checking for updates)
@@ -507,7 +507,6 @@ func clearDismissedUpdate() {
 	} else {
 		cfgMutex.Unlock()
 	}
-	configMutex.Unlock()
 }
 
 // fetchLatestRelease fetches the latest release from GitHub API
