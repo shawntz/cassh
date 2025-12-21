@@ -109,11 +109,11 @@ type Connection struct {
 	KeyRotationHours int   `toml:"key_rotation_hours,omitempty"` // 0 = no rotation
 	KeyCreatedAt     int64 `toml:"key_created_at,omitempty"`     // Unix timestamp
 
-	// For GitHub personal: SSH key ID for deletion
-	GitHubKeyID string `toml:"github_key_id,omitempty"`
-
-	// For GitLab personal: SSH key ID for deletion (integer ID)
-	GitLabKeyID int `toml:"gitlab_key_id,omitempty"`
+	// SSH Key IDs for deletion on personal connections
+	// Note: GitHub uses string IDs while GitLab uses integer IDs due to
+	// differences in their respective API designs
+	GitHubKeyID string `toml:"github_key_id,omitempty"` // For GitHub personal
+	GitLabKeyID int    `toml:"gitlab_key_id,omitempty"` // For GitLab personal
 
 	// For GitLab personal: Personal Access Token for API authentication
 	// This is stored in user config since it's user-specific
@@ -128,9 +128,15 @@ type Connection struct {
 	IsActive bool `toml:"-"`
 }
 
-// IsGitHub returns true if this is a GitHub connection
+// IsGitHub returns true if this is a GitHub connection.
+//
+// NOTE: For historical reasons, an empty Platform value is treated as GitHub.
+// Older configs did not persist the Platform field at all, so connections created
+// before Platform was introduced will have Platform == "" and must continue to be
+// interpreted as GitHub. Do not change this behavior unless you also provide a
+// migration path for existing user configurations.
 func (c *Connection) IsGitHub() bool {
-	return c.Platform == PlatformGitHub || c.Platform == "" // Empty platform defaults to GitHub for backwards compat
+	return c.Platform == PlatformGitHub || c.Platform == ""
 }
 
 // IsGitLab returns true if this is a GitLab connection
@@ -500,6 +506,11 @@ func LoadUserConfig() (*UserConfig, error) {
 			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
 		}
 
+		// Migrate deprecated fields for backwards compatibility
+		for i := range config.Connections {
+			config.Connections[i].MigrateDeprecatedFields()
+		}
+
 		// Mark that we're using dotfiles config
 		config.usingDotfiles = true
 		return &config, nil
@@ -525,6 +536,11 @@ func LoadUserConfig() (*UserConfig, error) {
 	config := DefaultUserConfig() // Start with defaults
 	if err := toml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse user config: %w", err)
+	}
+
+	// Migrate deprecated fields for backwards compatibility
+	for i := range config.Connections {
+		config.Connections[i].MigrateDeprecatedFields()
 	}
 
 	return &config, nil

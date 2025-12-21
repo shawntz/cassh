@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	// errFailedToReadResponseBody is the fallback error message when reading the response body fails
+	errFailedToReadResponseBody = "failed to read response body"
+)
+
 // Client represents a GitLab API client
 type Client struct {
 	baseURL string
@@ -20,17 +25,22 @@ type Client struct {
 
 // SSHKey represents a GitLab SSH key
 type SSHKey struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Key       string    `json:"key"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Key       string     `json:"key"`
+	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // NewClient creates a new GitLab API client
 // baseURL should be the GitLab instance URL (e.g., "https://gitlab.com" or "https://gitlab.company.com")
 // token is a personal access token with `api` scope
-func NewClient(baseURL, token string) *Client {
+func NewClient(baseURL, token string) (*Client, error) {
+	// Validate token is not empty
+	if token == "" {
+		return nil, fmt.Errorf("token cannot be empty")
+	}
+
 	// Remove trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
@@ -38,9 +48,32 @@ func NewClient(baseURL, token string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
+	}, nil
+}
+
+// sanitizeErrorMessage extracts a safe error message from the response body
+// without exposing potentially sensitive information
+func sanitizeErrorMessage(body []byte) string {
+	// Try to parse as JSON and extract only the message field
+	var errResponse struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
 	}
+	
+	if err := json.Unmarshal(body, &errResponse); err == nil {
+		if errResponse.Message != "" {
+			return errResponse.Message
+		}
+		if errResponse.Error != "" {
+			return errResponse.Error
+		}
+	}
+	
+	// If we can't parse the JSON or there's no message field,
+	// return a generic error message to avoid exposing sensitive data
+	return "API request failed (response body omitted for security)"
 }
 
 // doRequest performs an HTTP request with authentication
@@ -54,8 +87,8 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	url := c.baseURL + endpoint
-	req, err := http.NewRequest(method, url, reqBody)
+	requestURL := c.baseURL + endpoint
+	req, err := http.NewRequest(method, requestURL, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -218,31 +251,20 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err == nil && parsed.Hostname() != "" {
-		// Use the parsed hostname, which excludes any port.
-		return parsed.Hostname()
+	if err != nil || parsed.Hostname() == "" {
+		// If parsing fails or no hostname, try to extract manually
+		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
+		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
+		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
+		// Remove port if present
+		if idx := strings.Index(gitlabURL, ":"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		// Remove path if present
+		if idx := strings.Index(gitlabURL, "/"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		return gitlabURL
 	}
-
-	// If parsing fails or no hostname is found, try to extract manually.
-	if err != nil {
-		fmt.Printf("warning: failed to parse GitLab URL %q: %v\n", gitlabURL, err)
-	}
-
-	host := strings.TrimPrefix(gitlabURL, "https://")
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimPrefix(host, "//")
-	host = strings.TrimSpace(host)
-	host = strings.TrimSuffix(host, "/")
-
-	// Remove any path component.
-	if idx := strings.Index(host, "/"); idx != -1 {
-		host = host[:idx]
-	}
-
-	// Remove any port component.
-	if idx := strings.Index(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
-
-	return host
+	return parsed.Hostname()
 }
