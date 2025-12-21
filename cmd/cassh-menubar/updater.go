@@ -370,19 +370,14 @@ func startPersistentUpdateNotifier() {
 
 			if updateStatus == UpdateStatusAvailable &&
 				dismissedVersion != latestVersion &&
-				persistent {
+				notifyPersistent {
 
-				// Check if we've sent a notification recently
-				if time.Since(lastNotificationTime) >= notifyInterval {
-					currentVersion := normalizeVersion(version)
-					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
-					sendNotificationWithCategory(
-						"cassh Update Available",
-						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
-						"UPDATE_AVAILABLE",
-					)
-					lastNotificationTime = time.Now()
-				}
+				currentVersion := normalizeVersion(version)
+				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
+				sendNativeNotification(
+					"cassh Update Available",
+					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+				)
 			}
 		}
 	}()
@@ -396,11 +391,32 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
-		"UPDATE_AVAILABLE",
 	)
 
 	lastNotificationTime = time.Now()
 	updateNotificationSent = true
+}
+
+// sendNativeNotification sends a macOS User Notification
+func sendNativeNotification(title, message string) {
+	script := fmt.Sprintf(`
+		display notification "%s" with title "%s" sound name "default"
+	`, escapeForAppleScript(message), escapeForAppleScript(title))
+
+	cmd := exec.Command("osascript", "-e", script)
+	if err := cmd.Run(); err != nil {
+		log.Printf("Failed to send notification: %v", err)
+	}
+}
+
+// escapeForAppleScript escapes quotes, backslashes, and control chars for AppleScript
+func escapeForAppleScript(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	// Replace newline and carriage return characters with a visible \n sequence
+	s = strings.ReplaceAll(s, "\r", "\\n")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	return s
 }
 
 // dismissUpdate marks the current update version as dismissed
