@@ -186,7 +186,7 @@ func checkForUpdatesBackground() {
 
 	if !updateCheckEnabled {
 		log.Printf("Update checks disabled by user")
-		return
+		return false
 	}
 
 	// Check if we should check for updates based on interval
@@ -198,7 +198,7 @@ func checkForUpdatesBackground() {
 
 	if time.Since(lastCheckTime) < checkInterval {
 		log.Printf("Skipping update check, last checked %v ago (interval: %v)", time.Since(lastCheckTime), checkInterval)
-		return
+		return false
 	}
 
 	release, err := fetchLatestRelease()
@@ -209,9 +209,9 @@ func checkForUpdatesBackground() {
 			updateStatus = UpdateStatusNoReleases
 			updateStateMutex.Unlock()
 		} else {
-			log.Printf("Background update check failed: %v", err)
+			log.Printf("%s update check failed: %v", source, err)
 		}
-		return
+		return false
 	}
 
 	newLatestVersion := normalizeVersion(release.TagName)
@@ -264,6 +264,25 @@ func checkForUpdatesBackground() {
 		}
 		log.Printf("Already up to date: %s", currentVersion)
 	}
+
+	return true
+}
+
+// checkForUpdatesBackground silently checks for updates on startup
+func checkForUpdatesBackground() {
+	// Wait a bit before checking to not slow down startup
+	time.Sleep(5 * time.Second)
+	// Background check always shows notification on first check
+	performUpdateCheck("background", true)
+}
+
+// calculateCheckInterval returns the check interval duration based on configured days
+// If days is 0, defaults to 24 hours (daily)
+func calculateCheckInterval(days int) time.Duration {
+	if days == 0 {
+		return 24 * time.Hour
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // startPeriodicUpdateChecker starts a background goroutine that checks for updates periodically
@@ -281,20 +300,39 @@ func startPeriodicUpdateChecker() {
 		// Initial check after startup
 		checkForUpdatesBackground()
 
-		// Set up periodic checks
-		checkInterval := getUpdateCheckInterval()
+		// Set up periodic checks with dynamic config reloading
+		checkInterval := calculateCheckInterval(cfg.User.UpdateCheckIntervalDays)
 
 		ticker := time.NewTicker(checkInterval)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			cfgMutex.RLock()
-			enabled := cfg.User.UpdateCheckEnabled
-			cfgMutex.RUnlock()
+		// Track current interval to detect changes
+		currentIntervalDays := cfg.User.UpdateCheckIntervalDays
 
-			if !enabled {
-				log.Printf("Update checks disabled, stopping periodic checker")
+		for range ticker.C {
+			// Reload config to check for interval changes and enabled state
+			userCfg, err := config.LoadUserConfig()
+			if err != nil {
+				log.Printf("Failed to reload config for update check: %v", err)
+				// Skip this iteration if we can't reload config
+				continue
+			}
+
+			// Check if update checks have been disabled via config
+			if !userCfg.UpdateCheckEnabled {
+				log.Printf("Update checks disabled via config, stopping periodic checker")
 				return
+			}
+
+			// Check if the interval has changed
+			if userCfg.UpdateCheckIntervalDays != currentIntervalDays {
+				newInterval := calculateCheckInterval(userCfg.UpdateCheckIntervalDays)
+
+				log.Printf("Update check interval changed from %d to %d days, resetting ticker", currentIntervalDays, userCfg.UpdateCheckIntervalDays)
+				currentIntervalDays = userCfg.UpdateCheckIntervalDays
+
+				// Reset ticker with new interval (no memory leak, same ticker instance)
+				ticker.Reset(newInterval)
 			}
 
 			release, err := fetchLatestRelease()
@@ -306,17 +344,9 @@ func startPeriodicUpdateChecker() {
 			newLatestVersion := normalizeVersion(release.TagName)
 			currentVersion := normalizeVersion(version)
 
-			// Update last check time
-			cfgMutex.Lock()
-			cfg.User.LastUpdateCheckTime = time.Now().Unix()
-			userConfigCopy := cfg.User
-			// Deep copy Connections slice to avoid sharing underlying array
-			if len(userConfigCopy.Connections) > 0 {
-				userConfigCopy.Connections = append([]config.Connection(nil), cfg.User.Connections...)
-			}
-			cfgMutex.Unlock()
-
-			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
+			// Update last check time in reloaded config
+			userCfg.LastUpdateCheckTime = time.Now().Unix()
+			if err := config.SaveUserConfig(userCfg); err != nil {
 				log.Printf("Failed to save config after periodic update check: %v", err)
 			}
 			cfgMutex.Unlock()
@@ -426,13 +456,20 @@ func sendNativeNotification(title, message string) {
 	}
 }
 
-// escapeForAppleScript escapes quotes, backslashes, and control chars for AppleScript
+// escapeForAppleScript escapes special characters for AppleScript strings.
+// It handles backslashes, quotes, and control characters that could break
+// AppleScript syntax or cause unexpected behavior in notifications.
 func escapeForAppleScript(s string) string {
+	// Escape backslashes first (before other escapes that use backslash)
 	s = strings.ReplaceAll(s, "\\", "\\\\")
+	// Escape double quotes
 	s = strings.ReplaceAll(s, "\"", "\\\"")
-	// Replace newline and carriage return characters with a visible \n sequence
-	s = strings.ReplaceAll(s, "\r", "\\n")
-	s = strings.ReplaceAll(s, "\n", "\\n")
+	// Replace control characters with visible sequences for notifications
+	s = strings.ReplaceAll(s, "\r", "\\n")  // Carriage return
+	s = strings.ReplaceAll(s, "\n", "\\n")  // Newline
+	s = strings.ReplaceAll(s, "\t", " ")    // Tab (replace with space for readability)
+	s = strings.ReplaceAll(s, "\f", " ")    // Form feed
+	s = strings.ReplaceAll(s, "\v", " ")    // Vertical tab
 	return s
 }
 
