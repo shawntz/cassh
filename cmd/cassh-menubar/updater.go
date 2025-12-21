@@ -225,12 +225,7 @@ func startPeriodicUpdateChecker() {
 		currentIntervalDays := cfg.User.UpdateCheckIntervalDays
 
 		for range ticker.C {
-			if !cfg.User.UpdateCheckEnabled {
-				log.Printf("Update checks disabled, stopping periodic checker")
-				return
-			}
-
-			// Reload config to check for interval changes
+			// Reload config to check for interval changes and enabled state
 			userCfg, err := config.LoadUserConfig()
 			if err != nil {
 				log.Printf("Failed to reload config for update check: %v", err)
