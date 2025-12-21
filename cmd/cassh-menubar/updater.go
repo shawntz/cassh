@@ -172,19 +172,6 @@ func checkForUpdatesWithUI() {
 	}
 }
 
-// getUpdateCheckInterval returns the configured update check interval or default (24 hours)
-func getUpdateCheckInterval() time.Duration {
-	cfgMutex.RLock()
-	intervalDays := cfg.User.UpdateCheckIntervalDays
-	cfgMutex.RUnlock()
-
-	checkInterval := time.Duration(intervalDays) * 24 * time.Hour
-	if intervalDays == 0 {
-		checkInterval = 24 * time.Hour // Default to daily
-	}
-	return checkInterval
-}
-
 // checkForUpdatesBackground silently checks for updates on startup
 func checkForUpdatesBackground() {
 	// Wait a bit before checking to not slow down startup
@@ -383,11 +370,6 @@ func startPersistentUpdateNotifier() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			cfgMutex.RLock()
-			dismissedVersion := cfg.User.DismissedUpdateVersion
-			persistent := cfg.User.UpdateNotifyPersistent
-			cfgMutex.RUnlock()
-
 			// Only notify if update is available and not dismissed
 			cfgMutex.RLock()
 			dismissedVersion := cfg.User.DismissedUpdateVersion
