@@ -2200,10 +2200,15 @@ func findGitHubKeyIDByTitle(title string) string {
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		fields := strings.Fields(line)
-		// Check if the first field (title) exactly matches
-		if len(fields) >= 6 && fields[0] == title {
-			// Key ID is the second-to-last field (last is "authentication" or "signing")
-			return fields[len(fields)-2]
+		if len(fields) >= 6 {
+			// TITLE may contain spaces; everything before the last 5 fields belongs to the title.
+			titleFieldCount := len(fields) - 5
+			lineTitle := strings.Join(fields[:titleFieldCount], " ")
+			// Check if the reconstructed title exactly matches
+			if lineTitle == title {
+				// Key ID is the second-to-last field (last is "authentication" or "signing")
+				return fields[len(fields)-2]
+			}
 		}
 	}
 	return ""
