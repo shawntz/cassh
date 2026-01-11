@@ -41,24 +41,43 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
+# Validate username format (alphanumeric, underscore, hyphen, dot)
+if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+  echo "Error: Invalid console username format" >&2
+  CONSOLE_USER=""
+  CONSOLE_UID=""
+fi
+
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
+  # Create log directory for console user
+  # Use dscl to safely get home directory (more secure than sh -c)
+  CONSOLE_HOME=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+  if [ -n "$CONSOLE_HOME" ] && [ -d "$CONSOLE_HOME" ]; then
+    PARENT_LOG_DIR="$CONSOLE_HOME/Library/Logs"
+    # Ensure parent log directory exists and is usable
+    if [ ! -d "$PARENT_LOG_DIR" ]; then
+      if ! mkdir -p "$PARENT_LOG_DIR" 2>/dev/null; then
+        echo "Warning: Failed to create parent log directory $PARENT_LOG_DIR" >&2
+      fi
+    fi
+
+    if [ -d "$PARENT_LOG_DIR" ] && [ -w "$PARENT_LOG_DIR" ]; then
+      LOG_DIR="$PARENT_LOG_DIR/cassh"
+      if ! sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR"; then
+        echo "Warning: Failed to create log directory $LOG_DIR" >&2
+      fi
+    else
+      echo "Warning: Parent log directory $PARENT_LOG_DIR is not writable; skipping log directory creation." >&2
+    fi
+  fi
+  
   # Kill any existing cassh process
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1
 
   # Unload old LaunchAgents if exist (ignore errors)
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
+  unload_launch_agent "$LABEL" "$LAUNCH_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
+  unload_launch_agent "$ROTATE_LABEL" "$ROTATE_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
 
   # Load main app LaunchAgent for current user using modern launchctl
   # Try bootstrap first (modern), fall back to load (legacy)

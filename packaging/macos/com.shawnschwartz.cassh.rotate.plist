@@ -11,13 +11,9 @@
         <string>--rotate-keys</string>
     </array>
 
-    <!-- Run every hour -->
+    <!-- Run every hour (no immediate execution on load) -->
     <key>StartInterval</key>
     <integer>3600</integer>
-
-    <!-- Also run shortly after load (30 seconds delay) -->
-    <key>RunAtLoad</key>
-    <true/>
 
     <!-- Don't run if already running -->
     <key>LaunchOnlyOnce</key>
@@ -33,8 +29,8 @@
 
     <!-- Logging -->
     <key>StandardOutPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>~/Library/Logs/cassh/cassh-rotate.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>~/Library/Logs/cassh/cassh-rotate.log</string>
 </dict>
 </plist>
