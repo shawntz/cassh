@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -51,6 +52,7 @@ var (
 
 var (
 	cfg        *config.MergedConfig
+	cfgMutex   sync.RWMutex // Protects concurrent access to cfg.User
 	needsSetup bool
 	templates  *template.Template
 
@@ -75,6 +77,17 @@ type ConnectionStatus struct {
 	NotifiedActivation bool
 	NotifiedExpiring   bool
 	NotifiedExpired    bool
+}
+
+// deepCopyUserConfig creates a deep copy of UserConfig to avoid sharing the Connections slice
+// This prevents race conditions when saving config after releasing the mutex
+func deepCopyUserConfig(src config.UserConfig) config.UserConfig {
+	dst := src
+	if len(src.Connections) > 0 {
+		dst.Connections = make([]config.Connection, len(src.Connections))
+		copy(dst.Connections, src.Connections)
+	}
+	return dst
 }
 
 func main() {
@@ -141,9 +154,13 @@ func main() {
 	policyFromBundle := strings.Contains(policyPath, ".app/Contents/Resources")
 	if config.IsEnterpriseMode(&cfg.Policy) && !cfg.User.HasConnections() && policyFromBundle && !cfg.Policy.IsDevMode() {
 		if conn := config.CreateEnterpriseConnectionFromPolicy(&cfg.Policy); conn != nil {
+			cfgMutex.Lock()
 			cfg.User.AddConnection(*conn)
+			userConfigCopy := deepCopyUserConfig(cfg.User)
+			cfgMutex.Unlock()
+
 			// Save the connection
-			if err := config.SaveUserConfig(&cfg.User); err != nil {
+			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 				log.Printf("Warning: Could not save user config: %v", err)
 			}
 		}
@@ -574,8 +591,12 @@ func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 		return
 	}
 
+	// Lock before rotating the key since rotatePersonalGitHubSSH modifies the connection
+	cfgMutex.Lock()
+
 	// Rotate the key (delete old, generate new, upload new)
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
+		cfgMutex.Unlock()
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
 		updateConnectionStatus(connIdx)
@@ -583,7 +604,10 @@ func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 	}
 
 	// Save updated connection config with new key ID and timestamp
-	if err := config.SaveUserConfig(&cfg.User); err != nil {
+	userConfigCopy := deepCopyUserConfig(cfg.User)
+	cfgMutex.Unlock()
+
+	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after key rotation: %v", err)
 	}
 
@@ -596,11 +620,15 @@ func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 
 // updateConnectionStatus checks and updates the status for a specific connection
 func updateConnectionStatus(connIdx int) {
+	cfgMutex.RLock()
 	if connIdx >= len(cfg.User.Connections) {
+		cfgMutex.RUnlock()
 		return
 	}
 
 	conn := cfg.User.Connections[connIdx]
+	cfgMutex.RUnlock()
+
 	status := connectionStatus[conn.ID]
 	if status == nil {
 		status = &ConnectionStatus{ConnectionID: conn.ID}
@@ -726,7 +754,11 @@ func setConnectionStatusInvalid(connIdx int, reason string, isExpired bool) {
 
 // monitorConnections periodically checks all connection statuses
 func monitorConnections() {
-	interval := time.Duration(cfg.User.RefreshIntervalSeconds) * time.Second
+	cfgMutex.RLock()
+	refreshInterval := cfg.User.RefreshIntervalSeconds
+	cfgMutex.RUnlock()
+
+	interval := time.Duration(refreshInterval) * time.Second
 	if interval == 0 {
 		interval = 30 * time.Second
 	}
@@ -734,7 +766,11 @@ func monitorConnections() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		for i := range cfg.User.Connections {
+		cfgMutex.RLock()
+		numConnections := len(cfg.User.Connections)
+		cfgMutex.RUnlock()
+
+		for i := 0; i < numConnections; i++ {
 			updateConnectionStatus(i)
 		}
 	}
@@ -1270,7 +1306,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", minutes)
 }
 
-
 // uninstallCassh removes cassh and all its data from the system
 func uninstallCassh() {
 	// Show confirmation dialog
@@ -1753,8 +1788,12 @@ func handleAddEnterprise(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add connection to config
+		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -1908,8 +1947,12 @@ func handleAddPersonal(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add connection to config
+		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -2024,8 +2067,12 @@ func handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update config
+		cfgMutex.Lock()
 		cfg.User.Connections = newConnections
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -2036,7 +2083,9 @@ func handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
 		delete(connectionStatus, req.ID)
 
 		// Update needs setup flag
+		cfgMutex.RLock()
 		needsSetup = len(cfg.User.Connections) == 0
+		cfgMutex.RUnlock()
 
 		log.Printf("Deleted connection: %s (%s)", removedConn.Name, removedConn.ID)
 
@@ -2102,8 +2151,8 @@ func findGHBinary() string {
 
 	// Check common Homebrew locations
 	commonPaths := []string{
-		"/opt/homebrew/bin/gh",  // Apple Silicon
-		"/usr/local/bin/gh",     // Intel Mac
+		"/opt/homebrew/bin/gh",              // Apple Silicon
+		"/usr/local/bin/gh",                 // Intel Mac
 		"/home/linuxbrew/.linuxbrew/bin/gh", // Linux Homebrew
 	}
 
@@ -2366,6 +2415,7 @@ func checkAndRotateExpiredKeys() {
 	}
 
 	rotatedCount := 0
+	cfgMutex.Lock()
 	for i := range cfg.User.Connections {
 		conn := &cfg.User.Connections[i]
 		if needsKeyRotation(conn) {
@@ -2383,10 +2433,12 @@ func checkAndRotateExpiredKeys() {
 			rotatedCount++
 		}
 	}
+	userConfigCopy := deepCopyUserConfig(cfg.User)
+	cfgMutex.Unlock()
 
 	// Save config if any keys were rotated
 	if rotatedCount > 0 {
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config after key rotation: %v", err)
 		} else {
 			log.Printf("Rotated %d key(s) on startup", rotatedCount)

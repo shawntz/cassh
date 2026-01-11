@@ -104,6 +104,14 @@ type UserConfig struct {
 	PreferredMeme          string `toml:"preferred_meme"` // "lsp", "sloth", or "random"
 	ShowInDock             bool   `toml:"show_in_dock"`   // Show app icon in Dock
 
+	// Update notification settings
+	UpdateCheckEnabled      bool   `toml:"update_check_enabled"`       // Enable automatic update checks (default: true)
+	UpdateCheckIntervalDays int    `toml:"update_check_interval_days"` // Days between update checks (default: 1)
+	UpdateNotifyPersistent  bool   `toml:"update_notify_persistent"`   // Show persistent notifications (default: true)
+	UpdateNotifyIntervalMin int    `toml:"update_notify_interval_min"` // Minutes between re-notifications (default: 360 = 6 hours)
+	DismissedUpdateVersion  string `toml:"dismissed_update_version"`   // Version that user dismissed
+	LastUpdateCheckTime     int64  `toml:"last_update_check_time"`     // Unix timestamp of last check
+
 	// Connections (enterprise and/or personal GitHub accounts)
 	Connections []Connection `toml:"connections"`
 
@@ -144,6 +152,20 @@ func (u *UserConfig) RemoveConnection(id string) bool {
 		}
 	}
 	return false
+}
+
+// Validate checks that user config values are valid and safe to use
+func (u *UserConfig) Validate() error {
+	if u.UpdateCheckIntervalDays < 0 {
+		return fmt.Errorf("update_check_interval_days must be non-negative, got %d", u.UpdateCheckIntervalDays)
+	}
+	if u.UpdateNotifyIntervalMin < 0 {
+		return fmt.Errorf("update_notify_interval_min must be non-negative, got %d", u.UpdateNotifyIntervalMin)
+	}
+	if u.RefreshIntervalSeconds < 0 {
+		return fmt.Errorf("refresh_interval_seconds must be non-negative, got %d", u.RefreshIntervalSeconds)
+	}
+	return nil
 }
 
 // MergedConfig is the final runtime config
@@ -325,11 +347,16 @@ func (c *ServerConfig) Validate() error {
 func DefaultUserConfig() UserConfig {
 	homeDir, _ := os.UserHomeDir()
 	return UserConfig{
-		RefreshIntervalSeconds: 30,
-		NotificationSound:      true,
-		PreferredMeme:          "random",
-		SSHKeyPath:             filepath.Join(homeDir, ".ssh", "cassh_id_ed25519"),
-		SSHCertPath:            filepath.Join(homeDir, ".ssh", "cassh_id_ed25519-cert.pub"),
+		RefreshIntervalSeconds:  30,
+		NotificationSound:       true,
+		PreferredMeme:           "random",
+		ShowInDock:              false,
+		UpdateCheckEnabled:      true,
+		UpdateCheckIntervalDays: 1,
+		UpdateNotifyPersistent:  true,
+		UpdateNotifyIntervalMin: 360, // 6 hours
+		SSHKeyPath:              filepath.Join(homeDir, ".ssh", "cassh_id_ed25519"),
+		SSHCertPath:             filepath.Join(homeDir, ".ssh", "cassh_id_ed25519-cert.pub"),
 	}
 }
 
@@ -380,6 +407,11 @@ func LoadUserConfig() (*UserConfig, error) {
 			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
 		}
 
+		// Validate config values
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid dotfiles config: %w", err)
+		}
+
 		// Mark that we're using dotfiles config
 		config.usingDotfiles = true
 		return &config, nil
@@ -407,12 +439,22 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to parse user config: %w", err)
 	}
 
+	// Validate config values
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid user config: %w", err)
+	}
+
 	return &config, nil
 }
 
 // SaveUserConfig persists user prefs
 // Always saves to dotfiles location (~/.config/cassh/config.toml) for easy backup
 func SaveUserConfig(config *UserConfig) error {
+	// Validate config before saving
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
 	// Always use dotfiles location for new saves - it's user-friendly and backup-friendly
 	configPath := DotfilesConfigPath()
 
@@ -436,6 +478,11 @@ func SaveUserConfig(config *UserConfig) error {
 // SaveUserConfigToDotfiles saves config to the dotfiles location (~/.config/cassh/config.toml)
 // This can be used to migrate config to the dotfiles location
 func SaveUserConfigToDotfiles(config *UserConfig) error {
+	// Validate config before saving
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
 	configPath := DotfilesConfigPath()
 
 	// Ensure dir exists

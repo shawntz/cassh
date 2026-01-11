@@ -57,7 +57,7 @@ jobs:
   build-server:
     name: Build Server
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test, lint, test-macos]
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +80,7 @@ jobs:
   build-cli:
     name: Build CLI
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test, lint, test-macos]
     strategy:
       matrix:
         include:
@@ -114,10 +114,32 @@ jobs:
           name: cassh-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: build/cassh-${{ matrix.goos }}-${{ matrix.goarch }}
 
+  test-macos:
+    name: Test macOS Menubar
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run macOS menubar tests
+        env:
+          CGO_ENABLED: 1
+          GOOS: darwin
+        run: go test -v ./cmd/cassh-menubar
+
   build-macos-app:
     name: Build macOS App
     runs-on: macos-latest
-    needs: [test, lint]
+    needs: [test, lint, test-macos]
     steps:
       - uses: actions/checkout@v4
 
