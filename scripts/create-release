@@ -113,12 +113,24 @@ if grep -q "## \[Unreleased\]" CHANGELOG.md; then
     mv CHANGELOG.md.tmp CHANGELOG.md
 else
     # No [Unreleased] section, just prepend
+    # Determine where changelog entries begin by finding the first "## [" header.
+    # This avoids assuming a fixed header length, which is fragile if the header changes.
+    first_entry_line=$(grep -n '^## \[' CHANGELOG.md | head -n 1 | cut -d: -f1 || true)
+    if [ -n "${first_entry_line:-}" ]; then
+        header_end_line=$(( first_entry_line - 1 ))
+        tail_start_line=$first_entry_line
+    else
+        # Fallback to previous behavior if no "## [" section headers are found.
+        header_end_line=8
+        tail_start_line=9
+    fi
+
     {
-        head -n 8 CHANGELOG.md  # Keep header
+        head -n "$header_end_line" CHANGELOG.md  # Keep header
         echo ""
         echo "$CHANGELOG_CONTENT"
         echo ""
-        tail -n +9 CHANGELOG.md  # Rest of file
+        tail -n +"$tail_start_line" CHANGELOG.md  # Rest of file
     } > CHANGELOG.md.tmp
     mv CHANGELOG.md.tmp CHANGELOG.md
 fi
