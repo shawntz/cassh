@@ -401,27 +401,20 @@ func startPersistentUpdateNotifier() {
 
 		for range ticker.C {
 			// Only notify if update is available and not dismissed
-			cfgMutex.RLock()
-			dismissedVersion := cfg.User.DismissedUpdateVersion
-			notifyPersistent := cfg.User.UpdateNotifyPersistent
-			cfgMutex.RUnlock()
+			if updateStatus == UpdateStatusAvailable &&
+				cfg.User.DismissedUpdateVersion != latestVersion &&
+				cfg.User.UpdateNotifyPersistent {
 
-			updateStateMutex.RLock()
-			status := updateStatus
-			latestVer := latestVersion
-			updateStateMutex.RUnlock()
-
-			if status == UpdateStatusAvailable &&
-				dismissedVersion != latestVer &&
-				notifyPersistent {
-
-				currentVersion := normalizeVersion(version)
-				log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVer)
-				sendNotificationWithCategory(
-					"cassh Update Available",
-					fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVer, currentVersion),
-					"UPDATE_AVAILABLE",
-				)
+				// Check if we've sent a notification recently
+				if time.Since(lastNotificationTime) >= notifyInterval {
+					currentVersion := normalizeVersion(version)
+					log.Printf("Sending persistent update reminder: %s -> %s", currentVersion, latestVersion)
+					sendNativeNotification(
+						"cassh Update Available",
+						fmt.Sprintf("Version %s is available. You're on v%s.\n\nClick to download.", latestVersion, currentVersion),
+					)
+					lastNotificationTime = time.Now()
+				}
 			}
 		}
 	}()
@@ -435,7 +428,6 @@ func showUpdateNotification(newVersion string, release *GitHubRelease) {
 	sendNotificationWithCategory(
 		"cassh Update Available",
 		message,
-		"UPDATE_AVAILABLE",
 	)
 
 	updateStateMutex.Lock()
