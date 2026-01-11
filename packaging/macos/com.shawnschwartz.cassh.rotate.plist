@@ -15,9 +15,9 @@
     <key>StartInterval</key>
     <integer>3600</integer>
 
-    <!-- Don't run if already running -->
-    <key>LaunchOnlyOnce</key>
-    <false/>
+    <!-- Also run shortly after load (30 seconds delay) -->
+    <key>RunAtLoad</key>
+    <true/>
 
     <!-- Low priority background task -->
     <key>ProcessType</key>
