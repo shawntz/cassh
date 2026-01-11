@@ -41,27 +41,36 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
-# Function to unload a LaunchAgent (tries modern bootout, falls back to legacy unload)
-unload_launch_agent() {
-  local label="$1"
-  local agent_path="$2"
-  local user="$3"
-  local uid="$4"
-  
-  # Try bootout with sudo first
-  if ! sudo -u "$user" launchctl bootout "gui/$uid/$label" 2>/dev/null; then
-    # Fall back to unload with sudo
-    sudo -u "$user" launchctl unload "$agent_path" 2>/dev/null || true
-  fi
-  
-  # Try bootout without sudo
-  if ! launchctl bootout "gui/$uid/$label" 2>/dev/null; then
-    # Fall back to unload without sudo
-    launchctl unload "$agent_path" 2>/dev/null || true
-  fi
-}
+# Validate username format (alphanumeric, underscore, hyphen, dot)
+if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9._-]+$'; then
+  echo "Error: Invalid console username format" >&2
+  CONSOLE_USER=""
+  CONSOLE_UID=""
+fi
 
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
+  # Create log directory for console user
+  # Use dscl to safely get home directory (more secure than sh -c)
+  CONSOLE_HOME=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+  if [ -n "$CONSOLE_HOME" ] && [ -d "$CONSOLE_HOME" ]; then
+    PARENT_LOG_DIR="$CONSOLE_HOME/Library/Logs"
+    # Ensure parent log directory exists and is usable
+    if [ ! -d "$PARENT_LOG_DIR" ]; then
+      if ! mkdir -p "$PARENT_LOG_DIR" 2>/dev/null; then
+        echo "Warning: Failed to create parent log directory $PARENT_LOG_DIR" >&2
+      fi
+    fi
+
+    if [ -d "$PARENT_LOG_DIR" ] && [ -w "$PARENT_LOG_DIR" ]; then
+      LOG_DIR="$PARENT_LOG_DIR/cassh"
+      if ! sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR"; then
+        echo "Warning: Failed to create log directory $LOG_DIR" >&2
+      fi
+    else
+      echo "Warning: Parent log directory $PARENT_LOG_DIR is not writable; skipping log directory creation." >&2
+    fi
+  fi
+  
   # Kill any existing cassh process
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1

@@ -29,8 +29,8 @@
 
     <!-- Logging -->
     <key>StandardOutPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>~/Library/Logs/cassh/cassh-rotate.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/cassh-rotate.log</string>
+    <string>~/Library/Logs/cassh/cassh-rotate.log</string>
 </dict>
 </plist>
