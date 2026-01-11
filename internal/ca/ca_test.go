@@ -357,3 +357,136 @@ func TestGetCertInfoExpired(t *testing.T) {
 		t.Error("Certificate with 0 validity should be expired")
 	}
 }
+
+func TestSignPublicKeyForGitLab(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	ca, err := NewCA(caKey, 12, nil)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	cert, err := ca.SignPublicKeyForGitLab(userPub, "test-key-id", "testuser", "")
+	if err != nil {
+		t.Fatalf("SignPublicKeyForGitLab() error = %v", err)
+	}
+
+	// Verify certificate properties
+	if cert.KeyId != "test-key-id" {
+		t.Errorf("KeyId = %q, want %q", cert.KeyId, "test-key-id")
+	}
+
+	if len(cert.ValidPrincipals) != 1 || cert.ValidPrincipals[0] != "testuser" {
+		t.Errorf("ValidPrincipals = %v, want [testuser]", cert.ValidPrincipals)
+	}
+
+	if cert.CertType != ssh.UserCert {
+		t.Errorf("CertType = %d, want %d (UserCert)", cert.CertType, ssh.UserCert)
+	}
+
+	// Verify validity period
+	now := time.Now()
+	validAfter := time.Unix(int64(cert.ValidAfter), 0)
+	validBefore := time.Unix(int64(cert.ValidBefore), 0)
+
+	if validAfter.After(now) {
+		t.Errorf("ValidAfter (%v) is in the future", validAfter)
+	}
+
+	expectedExpiry := now.Add(12 * time.Hour)
+	if validBefore.Before(expectedExpiry.Add(-time.Minute)) || validBefore.After(expectedExpiry.Add(time.Minute)) {
+		t.Errorf("ValidBefore = %v, want approximately %v", validBefore, expectedExpiry)
+	}
+
+	// Verify standard SSH extensions
+	expectedExtensions := []string{
+		"permit-agent-forwarding",
+		"permit-port-forwarding",
+		"permit-pty",
+		"permit-user-rc",
+	}
+	for _, ext := range expectedExtensions {
+		if _, ok := cert.Extensions[ext]; !ok {
+			t.Errorf("Missing extension: %s", ext)
+		}
+	}
+
+	// Verify GitLab login extension for gitlab.com (empty host)
+	if val, ok := cert.Extensions["login@gitlab.com"]; !ok {
+		t.Error("Missing login@gitlab.com extension")
+	} else if val != "testuser" {
+		t.Errorf("login@gitlab.com = %q, want %q", val, "testuser")
+	}
+}
+
+func TestSignPublicKeyForGitLabWithCustomHost(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	ca, err := NewCA(caKey, 12, nil)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	customHost := "gitlab.company.com"
+	cert, err := ca.SignPublicKeyForGitLab(userPub, "test-key-id", "testuser", customHost)
+	if err != nil {
+		t.Fatalf("SignPublicKeyForGitLab() error = %v", err)
+	}
+
+	// Verify GitLab login extension for custom host
+	expectedExtKey := "login@" + customHost
+	if val, ok := cert.Extensions[expectedExtKey]; !ok {
+		t.Errorf("Missing %s extension", expectedExtKey)
+	} else if val != "testuser" {
+		t.Errorf("%s = %q, want %q", expectedExtKey, val, "testuser")
+	}
+
+	// Verify that login@gitlab.com is NOT present
+	if _, ok := cert.Extensions["login@gitlab.com"]; ok {
+		t.Error("Unexpected login@gitlab.com extension should not be present when custom host is specified")
+	}
+}
+
+func TestSignPublicKeyForGitLabWithPrincipals(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	principals := []string{"git", "deploy", "admin"}
+	ca, err := NewCA(caKey, 12, principals)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	cert, err := ca.SignPublicKeyForGitLab(userPub, "test-key-id", "testuser", "gitlab.example.org")
+	if err != nil {
+		t.Fatalf("SignPublicKeyForGitLab() error = %v", err)
+	}
+
+	// With configured principals, should use those instead of username
+	if len(cert.ValidPrincipals) != len(principals) {
+		t.Errorf("ValidPrincipals length = %d, want %d", len(cert.ValidPrincipals), len(principals))
+	}
+	for i, p := range principals {
+		if cert.ValidPrincipals[i] != p {
+			t.Errorf("ValidPrincipals[%d] = %q, want %q", i, cert.ValidPrincipals[i], p)
+		}
+	}
+
+	// Verify GitLab login extension is still set to the username
+	expectedExtKey := "login@gitlab.example.org"
+	if val, ok := cert.Extensions[expectedExtKey]; !ok {
+		t.Errorf("Missing %s extension", expectedExtKey)
+	} else if val != "testuser" {
+		t.Errorf("%s = %q, want %q", expectedExtKey, val, "testuser")
+    
+	// Verify login extension still uses the username
+	loginValue, ok := cert.Extensions["login@gitlab.com"]
+	if !ok {
+		t.Error("Missing GitLab login extension: login@gitlab.com")
+	}
+	if loginValue != "gitlabuser" {
+		t.Errorf("Login extension = %q, want %q", loginValue, "gitlabuser")
+	}
+}

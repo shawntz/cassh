@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -51,6 +52,7 @@ var (
 
 var (
 	cfg        *config.MergedConfig
+	cfgMutex   sync.RWMutex // Protects concurrent access to cfg.User
 	needsSetup bool
 	templates  *template.Template
 
@@ -77,6 +79,17 @@ type ConnectionStatus struct {
 	NotifiedExpired    bool
 }
 
+// deepCopyUserConfig creates a deep copy of UserConfig to avoid sharing the Connections slice
+// This prevents race conditions when saving config after releasing the mutex
+func deepCopyUserConfig(src config.UserConfig) config.UserConfig {
+	dst := src
+	if len(src.Connections) > 0 {
+		dst.Connections = make([]config.Connection, len(src.Connections))
+		copy(dst.Connections, src.Connections)
+	}
+	return dst
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting cassh-menubar...")
@@ -90,6 +103,9 @@ func main() {
 	// Register as login item (triggers system prompt on first run)
 	// Uses SMAppService on macOS 13+, falls back to LaunchAgent on older versions
 	registerAsLoginItem()
+
+	// Setup Dock icon click handler to open settings window
+	setupDockIconClickHandler()
 
 	// Load templates for setup wizard
 	var err error
@@ -138,9 +154,13 @@ func main() {
 	policyFromBundle := strings.Contains(policyPath, ".app/Contents/Resources")
 	if config.IsEnterpriseMode(&cfg.Policy) && !cfg.User.HasConnections() && policyFromBundle && !cfg.Policy.IsDevMode() {
 		if conn := config.CreateEnterpriseConnectionFromPolicy(&cfg.Policy); conn != nil {
+			cfgMutex.Lock()
 			cfg.User.AddConnection(*conn)
+			userConfigCopy := deepCopyUserConfig(cfg.User)
+			cfgMutex.Unlock()
+
 			// Save the connection
-			if err := config.SaveUserConfig(&cfg.User); err != nil {
+			if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 				log.Printf("Warning: Could not save user config: %v", err)
 			}
 		}
@@ -276,8 +296,14 @@ func buildConnectionMenu() {
 		}
 		actionItem := systray.AddMenuItem(fmt.Sprintf("  %s", actionText), fmt.Sprintf("Generate/renew for %s", conn.Name))
 
-		// Add revoke item for this connection (starts disabled until cert is verified)
-		revokeItem := systray.AddMenuItem("  Revoke Certificate", fmt.Sprintf("Revoke certificate for %s", conn.Name))
+		// Add revoke item for this connection (starts disabled until cert/key is verified)
+		revokeText := "Revoke Certificate"
+		revokeTooltip := fmt.Sprintf("Revoke certificate for %s", conn.Name)
+		if conn.Type == config.ConnectionTypePersonal {
+			revokeText = "Revoke Key"
+			revokeTooltip = fmt.Sprintf("Revoke SSH key for %s", conn.Name)
+		}
+		revokeItem := systray.AddMenuItem(fmt.Sprintf("  %s", revokeText), revokeTooltip)
 		revokeItem.Disable() // Disabled by default, enabled when cert is active
 		menuRevokeItems = append(menuRevokeItems, revokeItem)
 
@@ -286,7 +312,7 @@ func buildConnectionMenu() {
 		connIdx := i
 		go func() {
 			for range actionItem.ClickedCh {
-				handleConnectionAction(connID)
+				handleConnectionAction(connID, connIdx)
 			}
 		}()
 		go func() {
@@ -390,7 +416,7 @@ func openSetupWizard() {
 }
 
 // handleConnectionAction handles the action for a specific connection
-func handleConnectionAction(connID string) {
+func handleConnectionAction(connID string, connIdx int) {
 	conn := cfg.User.GetConnection(connID)
 	if conn == nil {
 		log.Printf("Connection not found: %s", connID)
@@ -400,11 +426,11 @@ func handleConnectionAction(connID string) {
 	if conn.Type == config.ConnectionTypeEnterprise {
 		generateCertForConnection(conn)
 	} else {
-		refreshKeyForConnection(conn)
+		refreshKeyForConnection(conn, connIdx)
 	}
 }
 
-// revokeConnectionCert revokes the certificate for a connection
+// revokeConnectionCert revokes the certificate/key for a connection
 func revokeConnectionCert(connID string, connIdx int) {
 	conn := cfg.User.GetConnection(connID)
 	if conn == nil {
@@ -412,6 +438,81 @@ func revokeConnectionCert(connID string, connIdx int) {
 		return
 	}
 
+	if conn.Type == config.ConnectionTypePersonal {
+		revokePersonalKey(conn, connIdx)
+	} else {
+		revokeEnterpriseCert(conn, connIdx)
+	}
+}
+
+// revokePersonalKey revokes an SSH key for a personal GitHub connection
+func revokePersonalKey(conn *config.Connection, connIdx int) {
+	log.Printf("Revoking SSH key for personal connection: %s", conn.Name)
+
+	// Remove key from ssh-agent first
+	if conn.SSHKeyPath != "" {
+		if err := exec.Command("ssh-add", "-d", conn.SSHKeyPath).Run(); err != nil {
+			log.Printf("Note: Could not remove key from ssh-agent: %v", err)
+		} else {
+			log.Printf("Removed key from ssh-agent: %s", conn.SSHKeyPath)
+		}
+	}
+
+	// Delete key from GitHub
+	keyID := conn.GitHubKeyID
+	if keyID == "" {
+		// Try to find by title if ID not stored (legacy config)
+		// Try new format with hostname first, then legacy format
+		keyTitle := getKeyTitle(conn.ID)
+		keyID = findGitHubKeyIDByTitle(keyTitle)
+		if keyID != "" {
+			log.Printf("Found GitHub key ID by title: %s -> %s", keyTitle, keyID)
+		} else {
+			// Try legacy format without hostname
+			legacyTitle := getLegacyKeyTitle(conn.ID)
+			keyID = findGitHubKeyIDByTitle(legacyTitle)
+			if keyID != "" {
+				log.Printf("Found GitHub key ID by legacy title: %s -> %s", legacyTitle, keyID)
+			}
+		}
+	}
+	if keyID != "" {
+		if err := deleteSSHKeyFromGitHub(keyID); err != nil {
+			log.Printf("Error deleting key from GitHub: %v", err)
+		} else {
+			log.Printf("Deleted key from GitHub: %s", keyID)
+		}
+	} else {
+		log.Printf("No GitHub key ID found, skipping GitHub deletion")
+	}
+
+	// Delete local key files
+	if conn.SSHKeyPath != "" {
+		os.Remove(conn.SSHKeyPath)
+		os.Remove(conn.SSHKeyPath + ".pub")
+		log.Printf("Removed local key files: %s", conn.SSHKeyPath)
+	}
+
+	// Clear the GitHub key ID and key created time from config
+	conn.GitHubKeyID = ""
+	conn.KeyCreatedAt = 0
+	if err := config.SaveUserConfig(&cfg.User); err != nil {
+		log.Printf("Error saving config: %v", err)
+	}
+
+	// Update the menu status
+	updateConnectionStatus(connIdx)
+
+	log.Printf("SSH key revoked for connection: %s", conn.Name)
+
+	// Send notification
+	sendNotification("SSH Key Revoked",
+		fmt.Sprintf("%s SSH key has been revoked and deleted from GitHub.", conn.Name),
+		false)
+}
+
+// revokeEnterpriseCert revokes the certificate for an enterprise connection
+func revokeEnterpriseCert(conn *config.Connection, connIdx int) {
 	log.Printf("Revoking certificate for connection: %s", conn.Name)
 
 	// Remove key from ssh-agent first
@@ -424,7 +525,7 @@ func revokeConnectionCert(connID string, connIdx int) {
 	}
 
 	// Remove certificate file
-	if conn.Type == config.ConnectionTypeEnterprise && conn.SSHCertPath != "" {
+	if conn.SSHCertPath != "" {
 		if err := os.Remove(conn.SSHCertPath); err != nil {
 			if !os.IsNotExist(err) {
 				log.Printf("Error removing certificate: %v", err)
@@ -478,7 +579,7 @@ func generateCertForConnection(conn *config.Connection) {
 }
 
 // refreshKeyForConnection handles key refresh for personal GitHub connection
-func refreshKeyForConnection(conn *config.Connection) {
+func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 	// Check if gh CLI is authenticated
 	ghStatus := checkGHAuth()
 	if !ghStatus.Installed {
@@ -490,17 +591,28 @@ func refreshKeyForConnection(conn *config.Connection) {
 		return
 	}
 
+	// Lock before rotating the key since rotatePersonalGitHubSSH modifies the connection
+	cfgMutex.Lock()
+
 	// Rotate the key (delete old, generate new, upload new)
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
+		cfgMutex.Unlock()
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
+		updateConnectionStatus(connIdx)
 		return
 	}
 
 	// Save updated connection config with new key ID and timestamp
-	if err := config.SaveUserConfig(&cfg.User); err != nil {
+	userConfigCopy := deepCopyUserConfig(cfg.User)
+	cfgMutex.Unlock()
+
+	if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 		log.Printf("Failed to save config after key rotation: %v", err)
 	}
+
+	// Update UI immediately
+	updateConnectionStatus(connIdx)
 
 	sendNotification("cassh", fmt.Sprintf("SSH key rotated for %s", conn.Name), false)
 	log.Printf("Rotated SSH key for: %s", conn.Name)
@@ -508,11 +620,15 @@ func refreshKeyForConnection(conn *config.Connection) {
 
 // updateConnectionStatus checks and updates the status for a specific connection
 func updateConnectionStatus(connIdx int) {
+	cfgMutex.RLock()
 	if connIdx >= len(cfg.User.Connections) {
+		cfgMutex.RUnlock()
 		return
 	}
 
 	conn := cfg.User.Connections[connIdx]
+	cfgMutex.RUnlock()
+
 	status := connectionStatus[conn.ID]
 	if status == nil {
 		status = &ConnectionStatus{ConnectionID: conn.ID}
@@ -638,7 +754,11 @@ func setConnectionStatusInvalid(connIdx int, reason string, isExpired bool) {
 
 // monitorConnections periodically checks all connection statuses
 func monitorConnections() {
-	interval := time.Duration(cfg.User.RefreshIntervalSeconds) * time.Second
+	cfgMutex.RLock()
+	refreshInterval := cfg.User.RefreshIntervalSeconds
+	cfgMutex.RUnlock()
+
+	interval := time.Duration(refreshInterval) * time.Second
 	if interval == 0 {
 		interval = 30 * time.Second
 	}
@@ -646,7 +766,11 @@ func monitorConnections() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		for i := range cfg.User.Connections {
+		cfgMutex.RLock()
+		numConnections := len(cfg.User.Connections)
+		cfgMutex.RUnlock()
+
+		for i := 0; i < numConnections; i++ {
 			updateConnectionStatus(i)
 		}
 	}
@@ -1182,7 +1306,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", minutes)
 }
 
-
 // uninstallCassh removes cassh and all its data from the system
 func uninstallCassh() {
 	// Show confirmation dialog
@@ -1665,8 +1788,12 @@ func handleAddEnterprise(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add connection to config
+		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -1820,8 +1947,12 @@ func handleAddPersonal(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add connection to config
+		cfgMutex.Lock()
 		cfg.User.AddConnection(conn)
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -1936,8 +2067,12 @@ func handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update config
+		cfgMutex.Lock()
 		cfg.User.Connections = newConnections
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		userConfigCopy := deepCopyUserConfig(cfg.User)
+		cfgMutex.Unlock()
+
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save configuration"})
@@ -1948,7 +2083,9 @@ func handleDeleteConnection(w http.ResponseWriter, r *http.Request) {
 		delete(connectionStatus, req.ID)
 
 		// Update needs setup flag
+		cfgMutex.RLock()
 		needsSetup = len(cfg.User.Connections) == 0
+		cfgMutex.RUnlock()
 
 		log.Printf("Deleted connection: %s (%s)", removedConn.Name, removedConn.ID)
 
@@ -2014,8 +2151,8 @@ func findGHBinary() string {
 
 	// Check common Homebrew locations
 	commonPaths := []string{
-		"/opt/homebrew/bin/gh",  // Apple Silicon
-		"/usr/local/bin/gh",     // Intel Mac
+		"/opt/homebrew/bin/gh",              // Apple Silicon
+		"/usr/local/bin/gh",                 // Intel Mac
 		"/home/linuxbrew/.linuxbrew/bin/gh", // Linux Homebrew
 	}
 
@@ -2093,7 +2230,7 @@ func generateSSHKeyForPersonal(conn *config.Connection) error {
 		return fmt.Errorf("failed to marshal private key: %w", err)
 	}
 
-	if err := os.WriteFile(keyPath, privKeyPEM.Bytes, 0600); err != nil {
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(privKeyPEM), 0600); err != nil {
 		return fmt.Errorf("failed to write private key: %w", err)
 	}
 
@@ -2278,6 +2415,7 @@ func checkAndRotateExpiredKeys() {
 	}
 
 	rotatedCount := 0
+	cfgMutex.Lock()
 	for i := range cfg.User.Connections {
 		conn := &cfg.User.Connections[i]
 		if needsKeyRotation(conn) {
@@ -2295,10 +2433,12 @@ func checkAndRotateExpiredKeys() {
 			rotatedCount++
 		}
 	}
+	userConfigCopy := deepCopyUserConfig(cfg.User)
+	cfgMutex.Unlock()
 
 	// Save config if any keys were rotated
 	if rotatedCount > 0 {
-		if err := config.SaveUserConfig(&cfg.User); err != nil {
+		if err := config.SaveUserConfig(&userConfigCopy); err != nil {
 			log.Printf("Failed to save config after key rotation: %v", err)
 		} else {
 			log.Printf("Rotated %d key(s) on startup", rotatedCount)
