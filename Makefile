@@ -29,14 +29,10 @@ POLICY_FILE ?= cassh.policy.example.toml
         icon app-bundle app-bundle-oss app-bundle-enterprise \
         dmg dmg-only pkg pkg-only \
         sign notarize \
-<<<<<<< Updated upstream
-        test lint
-=======
         test test-race test-coverage test-ci test-list \
         test-ca test-config test-memes test-menubar \
         lint \
         changelog changelog-preview create-release
->>>>>>> Stashed changes
 
 # Default: build all binaries
 all: deps build
