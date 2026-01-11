@@ -41,8 +41,8 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
-# Validate username format (alphanumeric, underscore, hyphen only)
-if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+# Validate username format (alphanumeric, underscore, hyphen, dot)
+if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9._-]+$'; then
   echo "Error: Invalid console username format" >&2
   CONSOLE_USER=""
   CONSOLE_UID=""
