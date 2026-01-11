@@ -41,7 +41,7 @@ jobs:
           fi
 
           # Generate changelog from last tag to HEAD
-          CHANGELOG=$(./scripts/generate-changelog "${{ steps.last_tag.outputs.tag }}" "HEAD" || echo "")
+          CHANGELOG=$(bash scripts/generate-changelog "${{ steps.last_tag.outputs.tag }}" "HEAD" || echo "")
 
           if [ -z "$CHANGELOG" ]; then
             echo "No new changes since last tag"
