@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+#
+# Generate changelog from git commits between two tags/refs
+# Usage: ./scripts/generate-changelog [FROM_REF] [TO_REF]
+#
+# Uses conventional commit format:
+#   feat: New feature
+#   fix: Bug fix
+#   docs: Documentation changes
+#   chore: Maintenance tasks
+#   test: Test changes
+#   refactor: Code refactoring
+#   perf: Performance improvements
+#   ci: CI/CD changes
+
+set -euo pipefail
+
+FROM_REF="${1:-}"
+TO_REF="${2:-HEAD}"
+
+# If no FROM_REF, use the most recent tag
+if [ -z "$FROM_REF" ]; then
+    FROM_REF=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+    if [ -z "$FROM_REF" ]; then
+        echo "Error: No previous tag found. Please specify a starting ref." >&2
+        exit 1
+    fi
+fi
+
+# Extract version from TO_REF if it's a tag
+if [[ "$TO_REF" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    VERSION="${BASH_REMATCH[1]}"
+else
+    VERSION="Unreleased"
+fi
+
+# Get commit range
+COMMIT_RANGE="${FROM_REF}..${TO_REF}"
+
+echo "Generating changelog for ${COMMIT_RANGE}..."
+echo ""
+
+# Date for changelog entry
+DATE=$(date +%Y-%m-%d)
+
+# Start changelog section
+if [ "$VERSION" = "Unreleased" ]; then
+    echo "## [Unreleased]"
+else
+    echo "## [${VERSION}] - ${DATE}"
+fi
+echo ""
+
+# Function to extract commits by type
+extract_commits() {
+    local type="$1"
+    local header="$2"
+
+    # Get commits matching this type
+    commits=$(git log "$COMMIT_RANGE" --pretty=format:"%h %s" --no-merges | \
+              grep -i "^[a-f0-9]* ${type}:" || true)
+
+    if [ -n "$commits" ]; then
+        echo "### ${header}"
+        echo ""
+        while IFS= read -r line; do
+            # Extract commit hash and message
+            commit_hash=$(echo "$line" | awk '{print $1}')
+            commit_msg=$(echo "$line" | cut -d' ' -f2- | sed "s/^${type}://i" | sed 's/^ *//')
+
+            # Capitalize first letter if message is not empty
+            if [ -n "$commit_msg" ]; then
+                commit_msg="$(echo "${commit_msg:0:1}" | tr '[:lower:]' '[:upper:]')${commit_msg:1}"
+            fi
+
+            echo "- ${commit_msg} (${commit_hash})"
+        done <<< "$commits"
+        echo ""
+    fi
+}
+
+# Extract commits by type
+extract_commits "feat" "Added"
+extract_commits "fix" "Fixed"
+extract_commits "perf" "Performance"
+extract_commits "docs" "Documentation"
+extract_commits "refactor" "Changed"
+extract_commits "test" "Tests"
+extract_commits "chore" "Maintenance"
+extract_commits "ci" "CI/CD"
+
+# Other commits (not following conventional commits)
+other_commits=$(git log "$COMMIT_RANGE" --pretty=format:"%h %s" --no-merges | \
+                grep -vi "^[a-f0-9]* \(feat\|fix\|docs\|chore\|test\|refactor\|perf\|ci\):" || true)
+
+if [ -n "$other_commits" ]; then
+    echo "### Other Changes"
+    echo ""
+    while IFS= read -r line; do
+        commit_hash=$(echo "$line" | awk '{print $1}')
+        commit_msg=$(echo "$line" | cut -d' ' -f2-)
+
+        # Capitalize first letter
+        commit_msg="$(echo "${commit_msg:0:1}" | tr '[:lower:]' '[:upper:]')${commit_msg:1}"
+
+        echo "- ${commit_msg} (${commit_hash})"
+    done <<< "$other_commits"
+    echo ""
+fi
+
+# Show contributors
+echo "### Contributors"
+echo ""
+git log "$COMMIT_RANGE" --pretty=format:"%an" --no-merges | sort -u | while read -r author; do
+    echo "- ${author}"
+done
+echo ""
+
+# Generate compare URL if we have both refs
+if [ "$VERSION" != "Unreleased" ] && git remote get-url origin &>/dev/null; then
+    REPO_URL=$(git remote get-url origin | sed 's/\.git$//' | sed 's/git@github.com:/https:\/\/github.com\//')
+    echo "**Full Changelog**: ${REPO_URL}/compare/${FROM_REF}...v${VERSION}"
+fi

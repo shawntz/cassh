@@ -130,10 +130,55 @@ When contributing, please consider:
 
 ### Commit Messages
 
+We use [Conventional Commits](https://www.conventionalcommits.org/) for automatic changelog generation:
+
+```
+<type>: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+
+- `feat:` - New feature (appears in changelog under "Added")
+- `fix:` - Bug fix (appears in changelog under "Fixed")
+- `perf:` - Performance improvement (appears in changelog under "Performance")
+- `docs:` - Documentation changes (appears in changelog under "Documentation")
+- `refactor:` - Code refactoring (appears in changelog under "Changed")
+- `test:` - Test changes (appears in changelog under "Tests")
+- `chore:` - Maintenance tasks (appears in changelog under "Maintenance")
+- `ci:` - CI/CD changes (appears in changelog under "CI/CD")
+
+**Examples:**
+
+```bash
+# Feature
+git commit -m "feat: Add dark mode support"
+
+# Bug fix
+git commit -m "fix: Resolve certificate expiration notification timing"
+
+# Breaking change
+git commit -m "feat!: Change config format to TOML
+
+BREAKING CHANGE: Config format changed from JSON to TOML."
+
+# With issue reference
+git commit -m "fix: Handle SSH username extraction from clone URLs
+
+Fixes #42"
+```
+
+**Additional guidelines:**
+
 - Use the present tense ("Add feature" not "Added feature")
 - Use the imperative mood ("Move cursor to..." not "Moves cursor to...")
 - Limit the first line to 72 characters
 - Reference issues and PRs in the body when relevant
+
+See [docs/releases.md](docs/releases.md) for more on the release process.
 
 ### Documentation
 
