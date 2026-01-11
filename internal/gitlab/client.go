@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	// errFailedToReadResponseBody is the fallback error message when reading the response body fails
+	errFailedToReadResponseBody = "failed to read response body"
+)
+
 // Client represents a GitLab API client
 type Client struct {
 	baseURL string
@@ -20,17 +25,22 @@ type Client struct {
 
 // SSHKey represents a GitLab SSH key
 type SSHKey struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Key       string    `json:"key"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Key       string     `json:"key"`
+	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // NewClient creates a new GitLab API client
 // baseURL should be the GitLab instance URL (e.g., "https://gitlab.com" or "https://gitlab.company.com")
 // token is a personal access token with `api` scope
-func NewClient(baseURL, token string) *Client {
+func NewClient(baseURL, token string) (*Client, error) {
+	// Validate token is not empty
+	if token == "" {
+		return nil, fmt.Errorf("token cannot be empty")
+	}
+
 	// Remove trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
@@ -38,9 +48,32 @@ func NewClient(baseURL, token string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
+	}, nil
+}
+
+// sanitizeErrorMessage extracts a safe error message from the response body
+// without exposing potentially sensitive information
+func sanitizeErrorMessage(body []byte) string {
+	// Try to parse as JSON and extract only the message field
+	var errResponse struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
 	}
+	
+	if err := json.Unmarshal(body, &errResponse); err == nil {
+		if errResponse.Message != "" {
+			return errResponse.Message
+		}
+		if errResponse.Error != "" {
+			return errResponse.Error
+		}
+	}
+	
+	// If we can't parse the JSON or there's no message field,
+	// return a generic error message to avoid exposing sensitive data
+	return "API request failed (response body omitted for security)"
 }
 
 // doRequest performs an HTTP request with authentication
@@ -54,8 +87,8 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	url := c.baseURL + endpoint
-	req, err := http.NewRequest(method, url, reqBody)
+	requestURL := c.baseURL + endpoint
+	req, err := http.NewRequest(method, requestURL, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -75,6 +108,11 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Res
 	return resp, nil
 }
 
+// sanitizeAPIError creates a safe error message from an API response without exposing sensitive data
+func sanitizeAPIError(operation string, statusCode int) error {
+	return fmt.Errorf("%s: API request failed with status %d", operation, statusCode)
+}
+
 // ListSSHKeys retrieves all SSH keys for the authenticated user
 func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	resp, err := c.doRequest("GET", "/api/v4/user/keys", nil)
@@ -84,10 +122,8 @@ func (c *Client) ListSSHKeys() ([]SSHKey, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to list SSH keys: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, sanitizeAPIError("failed to list SSH keys", resp.StatusCode)
 	}
-
 	var keys []SSHKey
 	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -129,21 +165,32 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	// Read the body for duplicate key detection (not exposed in errors)
+	body, readErr := io.ReadAll(resp.Body)
+	// If we can't read the body, we won't be able to detect duplicate keys,
+	// but we can still return a sanitized error based on the status code
+	if readErr != nil {
+		body = nil
+	}
 
 	if resp.StatusCode != http.StatusCreated {
-		// Check if key already exists
-		if strings.Contains(string(body), "has already been taken") {
-			// Try to find the existing key
-			existingKey, err := c.GetSSHKeyByTitle(title)
-			if err != nil {
-				return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
-			}
-			if existingKey != nil {
-				return existingKey, nil
+		// Check if key already exists (handle only relevant error status codes)
+		// Note: We use the response body internally to detect duplicate keys,
+		// but we don't expose it in the error message to prevent data leakage
+		if body != nil && (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict) {
+			bodyStr := strings.ToLower(string(body))
+			if strings.Contains(bodyStr, "has already been taken") || strings.Contains(bodyStr, "already exists") {
+				// Try to find the existing key
+				existingKey, err := c.GetSSHKeyByTitle(title)
+				if err != nil {
+					return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
+				}
+				if existingKey != nil {
+					return existingKey, nil
+				}
 			}
 		}
-		return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, sanitizeAPIError("failed to create SSH key", resp.StatusCode)
 	}
 
 	var key SSHKey
@@ -168,8 +215,7 @@ func (c *Client) DeleteSSHKey(keyID int) error {
 		if resp.StatusCode == http.StatusNotFound {
 			return nil
 		}
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete SSH key: %s (status: %d)", string(body), resp.StatusCode)
+		return sanitizeAPIError("failed to delete SSH key", resp.StatusCode)
 	}
 
 	return nil
@@ -184,8 +230,7 @@ func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("failed to get user info: %s (status: %d)", string(body), resp.StatusCode)
+		return nil, sanitizeAPIError("failed to get user info", resp.StatusCode)
 	}
 
 	var user map[string]interface{}
@@ -206,12 +251,20 @@ func (c *Client) ValidateToken() error {
 // Example: "https://gitlab.company.com" -> "gitlab.company.com"
 func ExtractHostFromURL(gitlabURL string) string {
 	parsed, err := url.Parse(gitlabURL)
-	if err != nil {
-		// If parsing fails, try to extract manually
+	if err != nil || parsed.Hostname() == "" {
+		// If parsing fails or no hostname, try to extract manually
 		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
 		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
 		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
+		// Remove port if present
+		if idx := strings.Index(gitlabURL, ":"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		// Remove path if present
+		if idx := strings.Index(gitlabURL, "/"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
 		return gitlabURL
 	}
-	return parsed.Host
+	return parsed.Hostname()
 }

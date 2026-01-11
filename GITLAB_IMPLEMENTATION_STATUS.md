@@ -2,6 +2,36 @@
 
 This document tracks the implementation of GitLab support in cassh.
 
+## Change Type Classification
+
+**Primary Type:** New Feature (non-breaking)
+
+This PR introduces GitLab platform support alongside existing GitHub functionality. The implementation is designed with the following characteristics:
+
+### ✅ New Feature
+- Adds comprehensive GitLab API client (`internal/gitlab/client.go`)
+- Introduces platform-agnostic configuration structure
+- Implements GitLab SSH certificate signing
+- Provides GitLab-specific documentation
+
+### ✅ Refactoring (Backwards Compatible)
+- Migrates `GitHubHost` → `Host` and `GitHubUsername` → `Username` in config structs
+- Implements automatic migration via `MigrateDeprecatedFields()` to preserve existing configs
+- Adds helper methods (`GetHost()`, `GetUsername()`) that handle both old and new field names
+- Maintains full backwards compatibility - existing GitHub-only configurations continue to work without modification
+
+### ❌ Not a Bug Fix
+- Does not address any existing issues or defects
+- No corrective changes to broken functionality
+
+### ❌ Not a Breaking Change
+- **Backwards compatible:** Old `GitHubHost` and `GitHubUsername` fields are automatically migrated
+- **Default behavior preserved:** Platform defaults to `github` when not specified
+- **Existing workflows unchanged:** All GitHub functionality continues to work identically
+- **No API changes:** Server endpoints and CLI interface remain the same
+
+The refactoring aspect involves restructuring configuration fields to be platform-agnostic, but the automatic migration and helper methods ensure zero breaking changes for existing users.
+
 ## ✅ Completed
 
 ### 1. GitLab API Client (`internal/gitlab/client.go`)
@@ -91,7 +121,10 @@ func generateSSHKeyForGitLabPersonal(conn *config.Connection) error {
 #### 5.3 SSH Key Upload to GitLab (new function)
 ```go
 func uploadSSHKeyToGitLab(conn *config.Connection, keyPath string, title string) (int, error) {
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return 0, err
+    }
     pubKeyPath := keyPath + ".pub"
     pubKeyData, err := os.ReadFile(pubKeyPath)
     // ...
@@ -103,7 +136,10 @@ func uploadSSHKeyToGitLab(conn *config.Connection, keyPath string, title string)
 #### 5.4 SSH Key Deletion from GitLab (new function)
 ```go
 func deleteSSHKeyFromGitLab(conn *config.Connection, keyID int) error {
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return err
+    }
     return client.DeleteSSHKey(keyID)
 }
 ```
@@ -184,7 +220,11 @@ func updateConnectionStatus(connIdx int) {
             // Existing GitHub logic
         } else if conn.IsGitLab() {
             // Check if token is valid
-            client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+            client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+            if err != nil {
+                setConnectionStatusInvalid(connIdx, "Invalid GitLab token", true)
+                return
+            }
             if err := client.ValidateToken(); err != nil {
                 setConnectionStatusInvalid(connIdx, "Invalid GitLab token", true)
                 return
@@ -248,7 +288,10 @@ func getGitLabUsername(conn *config.Connection) string {
     }
 
     // Try to get from API
-    client := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    client, err := gitlab.NewClient(getGitLabURL(conn), conn.GitLabToken)
+    if err != nil {
+        return ""
+    }
     user, err := client.GetCurrentUser()
     if err != nil {
         return ""

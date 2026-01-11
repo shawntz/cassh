@@ -480,5 +480,13 @@ func TestSignPublicKeyForGitLabWithPrincipals(t *testing.T) {
 		t.Errorf("Missing %s extension", expectedExtKey)
 	} else if val != "testuser" {
 		t.Errorf("%s = %q, want %q", expectedExtKey, val, "testuser")
+    
+	// Verify login extension still uses the username
+	loginValue, ok := cert.Extensions["login@gitlab.com"]
+	if !ok {
+		t.Error("Missing GitLab login extension: login@gitlab.com")
+	}
+	if loginValue != "gitlabuser" {
+		t.Errorf("Login extension = %q, want %q", loginValue, "gitlabuser")
 	}
 }
