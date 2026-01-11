@@ -357,3 +357,255 @@ func TestGetCertInfoExpired(t *testing.T) {
 		t.Error("Certificate with 0 validity should be expired")
 	}
 }
+
+func TestSignPublicKeyForGitHub(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	ca, err := NewCA(caKey, 12, nil)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	tests := []struct {
+		name           string
+		keyID          string
+		githubUsername string
+		githubHost     string
+		wantLoginExt   string
+	}{
+		{
+			name:           "GitHub.com (default)",
+			keyID:          "test-github-key",
+			githubUsername: "octocat",
+			githubHost:     "",
+			wantLoginExt:   "login@github.com",
+		},
+		{
+			name:           "GitHub Enterprise",
+			keyID:          "test-ghe-key",
+			githubUsername: "enterprise-user",
+			githubHost:     "github.company.com",
+			wantLoginExt:   "login@github.company.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cert, err := ca.SignPublicKeyForGitHub(userPub, tt.keyID, tt.githubUsername, tt.githubHost)
+			if err != nil {
+				t.Fatalf("SignPublicKeyForGitHub() error = %v", err)
+			}
+
+			// Verify certificate properties
+			if cert.KeyId != tt.keyID {
+				t.Errorf("KeyId = %q, want %q", cert.KeyId, tt.keyID)
+			}
+
+			if len(cert.ValidPrincipals) != 1 || cert.ValidPrincipals[0] != tt.githubUsername {
+				t.Errorf("ValidPrincipals = %v, want [%s]", cert.ValidPrincipals, tt.githubUsername)
+			}
+
+			if cert.CertType != ssh.UserCert {
+				t.Errorf("CertType = %d, want %d (UserCert)", cert.CertType, ssh.UserCert)
+			}
+
+			// Verify validity period
+			now := time.Now()
+			validAfter := time.Unix(int64(cert.ValidAfter), 0)
+			validBefore := time.Unix(int64(cert.ValidBefore), 0)
+
+			if validAfter.After(now) {
+				t.Errorf("ValidAfter (%v) is in the future", validAfter)
+			}
+
+			expectedExpiry := now.Add(12 * time.Hour)
+			if validBefore.Before(expectedExpiry.Add(-time.Minute)) || validBefore.After(expectedExpiry.Add(time.Minute)) {
+				t.Errorf("ValidBefore = %v, want approximately %v", validBefore, expectedExpiry)
+			}
+
+			// Verify standard extensions
+			expectedExtensions := []string{
+				"permit-agent-forwarding",
+				"permit-port-forwarding",
+				"permit-pty",
+				"permit-user-rc",
+			}
+			for _, ext := range expectedExtensions {
+				if _, ok := cert.Extensions[ext]; !ok {
+					t.Errorf("Missing extension: %s", ext)
+				}
+			}
+
+			// Verify GitHub login extension
+			loginValue, ok := cert.Extensions[tt.wantLoginExt]
+			if !ok {
+				t.Errorf("Missing GitHub login extension: %s", tt.wantLoginExt)
+			}
+			if loginValue != tt.githubUsername {
+				t.Errorf("Login extension %s = %q, want %q", tt.wantLoginExt, loginValue, tt.githubUsername)
+			}
+		})
+	}
+}
+
+func TestSignPublicKeyForGitHubWithPrincipals(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	principals := []string{"git", "deploy", "admin"}
+	ca, err := NewCA(caKey, 12, principals)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	cert, err := ca.SignPublicKeyForGitHub(userPub, "test-key-id", "octocat", "github.com")
+	if err != nil {
+		t.Fatalf("SignPublicKeyForGitHub() error = %v", err)
+	}
+
+	// With configured principals, should use those instead of username
+	if len(cert.ValidPrincipals) != len(principals) {
+		t.Errorf("ValidPrincipals length = %d, want %d", len(cert.ValidPrincipals), len(principals))
+	}
+	for i, p := range principals {
+		if cert.ValidPrincipals[i] != p {
+			t.Errorf("ValidPrincipals[%d] = %q, want %q", i, cert.ValidPrincipals[i], p)
+		}
+	}
+
+	// Verify login extension still uses the username
+	loginValue, ok := cert.Extensions["login@github.com"]
+	if !ok {
+		t.Error("Missing GitHub login extension: login@github.com")
+	}
+	if loginValue != "octocat" {
+		t.Errorf("Login extension = %q, want %q", loginValue, "octocat")
+	}
+}
+
+func TestSignPublicKeyForGitLab(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	ca, err := NewCA(caKey, 12, nil)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	tests := []struct {
+		name           string
+		keyID          string
+		gitlabUsername string
+		gitlabHost     string
+		wantLoginExt   string
+	}{
+		{
+			name:           "GitLab.com (default)",
+			keyID:          "test-gitlab-key",
+			gitlabUsername: "gitlabuser",
+			gitlabHost:     "",
+			wantLoginExt:   "login@gitlab.com",
+		},
+		{
+			name:           "GitLab Self-Managed",
+			keyID:          "test-gitlab-sm-key",
+			gitlabUsername: "enterprise-user",
+			gitlabHost:     "gitlab.company.com",
+			wantLoginExt:   "login@gitlab.company.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cert, err := ca.SignPublicKeyForGitLab(userPub, tt.keyID, tt.gitlabUsername, tt.gitlabHost)
+			if err != nil {
+				t.Fatalf("SignPublicKeyForGitLab() error = %v", err)
+			}
+
+			// Verify certificate properties
+			if cert.KeyId != tt.keyID {
+				t.Errorf("KeyId = %q, want %q", cert.KeyId, tt.keyID)
+			}
+
+			if len(cert.ValidPrincipals) != 1 || cert.ValidPrincipals[0] != tt.gitlabUsername {
+				t.Errorf("ValidPrincipals = %v, want [%s]", cert.ValidPrincipals, tt.gitlabUsername)
+			}
+
+			if cert.CertType != ssh.UserCert {
+				t.Errorf("CertType = %d, want %d (UserCert)", cert.CertType, ssh.UserCert)
+			}
+
+			// Verify validity period
+			now := time.Now()
+			validAfter := time.Unix(int64(cert.ValidAfter), 0)
+			validBefore := time.Unix(int64(cert.ValidBefore), 0)
+
+			if validAfter.After(now) {
+				t.Errorf("ValidAfter (%v) is in the future", validAfter)
+			}
+
+			expectedExpiry := now.Add(12 * time.Hour)
+			if validBefore.Before(expectedExpiry.Add(-time.Minute)) || validBefore.After(expectedExpiry.Add(time.Minute)) {
+				t.Errorf("ValidBefore = %v, want approximately %v", validBefore, expectedExpiry)
+			}
+
+			// Verify standard extensions
+			expectedExtensions := []string{
+				"permit-agent-forwarding",
+				"permit-port-forwarding",
+				"permit-pty",
+				"permit-user-rc",
+			}
+			for _, ext := range expectedExtensions {
+				if _, ok := cert.Extensions[ext]; !ok {
+					t.Errorf("Missing extension: %s", ext)
+				}
+			}
+
+			// Verify GitLab login extension
+			loginValue, ok := cert.Extensions[tt.wantLoginExt]
+			if !ok {
+				t.Errorf("Missing GitLab login extension: %s", tt.wantLoginExt)
+			}
+			if loginValue != tt.gitlabUsername {
+				t.Errorf("Login extension %s = %q, want %q", tt.wantLoginExt, loginValue, tt.gitlabUsername)
+			}
+		})
+	}
+}
+
+func TestSignPublicKeyForGitLabWithPrincipals(t *testing.T) {
+	caKey := generateTestCAKey(t)
+	principals := []string{"git", "deploy", "admin"}
+	ca, err := NewCA(caKey, 12, principals)
+	if err != nil {
+		t.Fatalf("Failed to create CA: %v", err)
+	}
+
+	userPub, _ := generateTestUserKey(t)
+
+	cert, err := ca.SignPublicKeyForGitLab(userPub, "test-key-id", "gitlabuser", "gitlab.com")
+	if err != nil {
+		t.Fatalf("SignPublicKeyForGitLab() error = %v", err)
+	}
+
+	// With configured principals, should use those instead of username
+	if len(cert.ValidPrincipals) != len(principals) {
+		t.Errorf("ValidPrincipals length = %d, want %d", len(cert.ValidPrincipals), len(principals))
+	}
+	for i, p := range principals {
+		if cert.ValidPrincipals[i] != p {
+			t.Errorf("ValidPrincipals[%d] = %q, want %q", i, cert.ValidPrincipals[i], p)
+		}
+	}
+
+	// Verify login extension still uses the username
+	loginValue, ok := cert.Extensions["login@gitlab.com"]
+	if !ok {
+		t.Error("Missing GitLab login extension: login@gitlab.com")
+	}
+	if loginValue != "gitlabuser" {
+		t.Errorf("Login extension = %q, want %q", loginValue, "gitlabuser")
+	}
+}
