@@ -52,9 +52,21 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID
   # Use dscl to safely get home directory (more secure than sh -c)
   CONSOLE_HOME=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
   if [ -n "$CONSOLE_HOME" ] && [ -d "$CONSOLE_HOME" ]; then
-    LOG_DIR="$CONSOLE_HOME/Library/Logs/cassh"
-    if ! sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR" 2>/dev/null; then
-      echo "Warning: Failed to create log directory $LOG_DIR" >&2
+    PARENT_LOG_DIR="$CONSOLE_HOME/Library/Logs"
+    # Ensure parent log directory exists and is usable
+    if [ ! -d "$PARENT_LOG_DIR" ]; then
+      if ! mkdir -p "$PARENT_LOG_DIR" 2>/dev/null; then
+        echo "Warning: Failed to create parent log directory $PARENT_LOG_DIR" >&2
+      fi
+    fi
+
+    if [ -d "$PARENT_LOG_DIR" ] && [ -w "$PARENT_LOG_DIR" ]; then
+      LOG_DIR="$PARENT_LOG_DIR/cassh"
+      if ! sudo -u "$CONSOLE_USER" mkdir -p "$LOG_DIR"; then
+        echo "Warning: Failed to create log directory $LOG_DIR" >&2
+      fi
+    else
+      echo "Warning: Parent log directory $PARENT_LOG_DIR is not writable; skipping log directory creation." >&2
     fi
   fi
   
