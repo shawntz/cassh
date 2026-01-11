@@ -2289,7 +2289,6 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 	} else if conn.ID != "" {
 		// No stored key ID - try to find and delete using both new and legacy title formats
 		// This handles migration from older versions where GitHubKeyID wasn't tracked
-		// Defensive check: ensure conn.ID is valid before attempting lookup
 		keyTitle := getKeyTitle(conn.ID)
 		if keyID := findGitHubKeyIDByTitle(keyTitle); keyID != "" {
 			log.Printf("Found existing key on GitHub during rotation (ID: %s)", keyID)
