@@ -45,6 +45,7 @@ CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
   echo "Error: Invalid console username format" >&2
   CONSOLE_USER=""
+  CONSOLE_UID=""
 fi
 
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
