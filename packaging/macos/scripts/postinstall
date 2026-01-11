@@ -41,24 +41,34 @@ fi
 CONSOLE_USER=$(stat -f "%Su" /dev/console)
 CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
 
+# Function to unload a LaunchAgent (tries modern bootout, falls back to legacy unload)
+unload_launch_agent() {
+  local label="$1"
+  local agent_path="$2"
+  local user="$3"
+  local uid="$4"
+  
+  # Try bootout with sudo first
+  if ! sudo -u "$user" launchctl bootout "gui/$uid/$label" 2>/dev/null; then
+    # Fall back to unload with sudo
+    sudo -u "$user" launchctl unload "$agent_path" 2>/dev/null || true
+  fi
+  
+  # Try bootout without sudo
+  if ! launchctl bootout "gui/$uid/$label" 2>/dev/null; then
+    # Fall back to unload without sudo
+    launchctl unload "$agent_path" 2>/dev/null || true
+  fi
+}
+
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
   # Kill any existing cassh process
   pkill -f "cassh.app" 2>/dev/null || true
   sleep 1
 
   # Unload old LaunchAgents if exist (ignore errors)
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
+  unload_launch_agent "$LABEL" "$LAUNCH_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
+  unload_launch_agent "$ROTATE_LABEL" "$ROTATE_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
 
   # Load main app LaunchAgent for current user using modern launchctl
   # Try bootstrap first (modern), fall back to load (legacy)
