@@ -165,40 +165,32 @@ func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*S
 	}
 	defer resp.Body.Close()
 
-	// Read the body for duplicate key detection (not exposed in errors)
-	body, readErr := io.ReadAll(resp.Body)
-	// If we can't read the body, we won't be able to detect duplicate keys,
-	// but we can still return a sanitized error based on the status code
-	if readErr != nil {
-		body = nil
-	}
-
-	if resp.StatusCode != http.StatusCreated {
-		// Check if key already exists (handle only relevant error status codes)
-		// Note: We use the response body internally to detect duplicate keys,
-		// but we don't expose it in the error message to prevent data leakage
-		if body != nil && (resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusConflict) {
-			bodyStr := strings.ToLower(string(body))
-			if strings.Contains(bodyStr, "has already been taken") || strings.Contains(bodyStr, "already exists") {
-				// Try to find the existing key
-				existingKey, err := c.GetSSHKeyByTitle(title)
-				if err != nil {
-					return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
-				}
-				if existingKey != nil {
-					return existingKey, nil
-				}
-			}
+	// Success case - decode response directly without reading into memory first
+	if resp.StatusCode == http.StatusCreated {
+		var key SSHKey
+		if err := json.NewDecoder(resp.Body).Decode(&key); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
 		}
-		return nil, sanitizeAPIError("failed to create SSH key", resp.StatusCode)
+		return &key, nil
 	}
 
-	var key SSHKey
-	if err := json.Unmarshal(body, &key); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	// Error case - read body for error details
+	body, _ := io.ReadAll(resp.Body)
+	
+	// GitLab returns 400 Bad Request when a key with the same title or content already exists
+	// Check if this is a duplicate key error before making additional API calls
+	if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "has already been taken") {
+		// Try to find the existing key
+		existingKey, err := c.GetSSHKeyByTitle(title)
+		if err != nil {
+			return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
+		}
+		if existingKey != nil {
+			return existingKey, nil
+		}
 	}
-
-	return &key, nil
+	
+	return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
 }
 
 // DeleteSSHKey removes an SSH key by ID
