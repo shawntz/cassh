@@ -47,6 +47,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
         if ([categoryID isEqualToString:@"CERT_EXPIRED"] ||
             [categoryID isEqualToString:@"CERT_EXPIRING"]) {
             notificationAction = 1; // renew
+        } else if ([categoryID isEqualToString:@"UPDATE_AVAILABLE"]) {
+            notificationAction = 3; // open releases page
         } else {
             notificationAction = 2; // open
         }
@@ -96,7 +98,13 @@ static void setupNotificationDelegate() {
                                                                            intentIdentifiers:@[]
                                                                                      options:UNNotificationCategoryOptionNone];
 
-    [center setNotificationCategories:[NSSet setWithObjects:certExpiringCategory, certExpiredCategory, generalCategory, nil]];
+    // Update available notification category
+    UNNotificationCategory *updateAvailableCategory = [UNNotificationCategory categoryWithIdentifier:@"UPDATE_AVAILABLE"
+                                                                                     actions:@[]
+                                                                           intentIdentifiers:@[]
+                                                                                     options:UNNotificationCategoryOptionNone];
+
+    [center setNotificationCategories:[NSSet setWithObjects:certExpiringCategory, certExpiredCategory, generalCategory, updateAvailableCategory, nil]];
 }
 
 // Check if running inside an app bundle (required for UNUserNotificationCenter)
@@ -192,14 +200,16 @@ func pollNotificationActions() {
 		switch action {
 		case 1: // renew
 			// Open the first enterprise connection for renewal
-			for _, conn := range cfg.User.Connections {
+			for i, conn := range cfg.User.Connections {
 				if conn.Type == "enterprise" {
-					handleConnectionAction(conn.ID)
+					handleConnectionAction(conn.ID, i)
 					break
 				}
 			}
 		case 2: // open
 			openSetupWizard()
+		case 3: // open releases page
+			openBrowser("https://github.com/shawntz/cassh/releases/latest")
 		}
 	}
 }
