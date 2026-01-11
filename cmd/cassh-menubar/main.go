@@ -2199,6 +2199,10 @@ func findGitHubKeyIDByTitle(title string) string {
 	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
+		// Skip empty or whitespace-only lines before parsing fields
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		fields := strings.Fields(line)
 		if len(fields) >= 6 {
 			// TITLE may contain spaces; everything before the last 5 fields belongs to the title.
