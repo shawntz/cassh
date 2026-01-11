@@ -113,12 +113,17 @@ This document provides an index of all tests in the cassh codebase, organized by
 
 ## Platform Requirements
 
-| Package | Linux | macOS | Notes |
-|---------|-------|-------|-------|
-| `internal/ca` | Yes | Yes | Pure Go |
-| `internal/config` | Yes | Yes | Pure Go |
-| `internal/memes` | Yes | Yes | Pure Go |
-| `cmd/cassh-menubar` | No | Yes | Requires CGO, macOS frameworks |
+| Package | Linux | macOS | Windows | Notes |
+|---------|-------|-------|---------|-------|
+| `internal/ca` | Yes | Yes | Yes* | Pure Go |
+| `internal/config` | Yes | Yes | Yes* | Pure Go |
+| `internal/memes` | Yes | Yes | Yes* | Pure Go |
+| `cmd/cassh-menubar` | No | Yes | No | Requires CGO, macOS frameworks |
+
+* **Windows Note**: While cross-platform packages can technically be tested on Windows using `go test` directly, the Makefile does not support Windows (it uses `uname` for platform detection). Windows support is planned for the future (see [roadmap](docs/roadmap.md)). For now, Windows users should:
+- Use Go commands directly: `go test ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/...`
+- Or build and test via GitHub Actions
+- The menubar app is macOS-only and will not be ported to Windows (a separate Windows system tray app is planned)
 
 ## CI/CD Integration
 
@@ -135,6 +140,8 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) runs:
 The `ci-success` job must pass before PRs can be merged to `main`.
 
 ## Running Tests Locally
+
+### macOS and Linux
 
 ```bash
 # Full test suite (recommended before committing)
@@ -156,6 +163,24 @@ make test-menubar  # macOS only
 # List all test files
 make test-list
 ```
+
+### Windows
+
+The Makefile is not supported on Windows. Use Go commands directly:
+
+```powershell
+# Run cross-platform tests (excludes menubar)
+go test -v ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/...
+
+# With race detection
+go test -v -race ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/...
+
+# With coverage
+go test -coverprofile=coverage.out ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/...
+go tool cover -html=coverage.out -o coverage.html
+```
+
+**Note**: The menubar app (`cmd/cassh-menubar`) requires macOS and cannot be built or tested on Windows.
 
 ## Adding New Tests
 
