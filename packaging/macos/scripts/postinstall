@@ -49,7 +49,7 @@ if ! echo "$CONSOLE_USER" | grep -qE '^[a-zA-Z0-9_-]+$'; then
 fi
 
 if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID" ]; then
-  # Create log directory for current user
+  # Create log directory for console user
   # Use dscl to safely get home directory (more secure than sh -c)
   CONSOLE_HOME=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
   if [ -n "$CONSOLE_HOME" ] && [ -d "$CONSOLE_HOME" ]; then
