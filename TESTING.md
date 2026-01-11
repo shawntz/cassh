@@ -120,7 +120,7 @@ This document provides an index of all tests in the cassh codebase, organized by
 | `internal/memes` | Yes | Yes | Yes* | Pure Go |
 | `cmd/cassh-menubar` | No | Yes | No | Requires CGO, macOS frameworks |
 
-* **Windows Note**: While cross-platform packages can technically be tested on Windows using `go test` directly, the Makefile does not support Windows (it uses `uname` for platform detection). Windows support is planned for the future (see [roadmap](roadmap.md)). For now, Windows users should:
+* **Windows Note**: While cross-platform packages can technically be tested on Windows using `go test` directly, the Makefile does not support Windows (it uses `uname` for platform detection). Windows support is planned for the future (see [roadmap](docs/roadmap.md)). For now, Windows users should:
 - Use Go commands directly: `go test ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/...`
 - Or build and test via GitHub Actions
 - The menubar app is macOS-only and will not be ported to Windows (a separate Windows system tray app is planned)
