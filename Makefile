@@ -320,17 +320,19 @@ test-coverage:
 ifeq ($(UNAME_S),Darwin)
 	@echo "Running all tests with coverage (macOS)..."
 	CGO_ENABLED=1 go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
 else ifeq ($(UNAME_S),Linux)
 	@echo "Running cross-platform tests with coverage (Linux)..."
 	go test -coverprofile=coverage.out $$(go list ./... | grep -v /cmd/cassh-menubar)
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
 else
 	@echo "❌ Error: Unsupported platform '$(UNAME_S)'"
 	@echo "This Makefile supports macOS and Linux only."
 	@echo "For Windows, use: go test -coverprofile=coverage.out ./internal/... ./cmd/cassh-server/... ./cmd/cassh-cli/..."
 	@exit 1
 endif
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
 
 # Run specific package tests
 test-ca:
