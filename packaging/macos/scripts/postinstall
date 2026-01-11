@@ -76,18 +76,8 @@ if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ] && [ -n "$CONSOLE_UID
   sleep 1
 
   # Unload old LaunchAgents if exist (ignore errors)
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$LABEL" 2>/dev/null; then
-    launchctl unload "$LAUNCH_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! sudo -u "$CONSOLE_USER" launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    sudo -u "$CONSOLE_USER" launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
-  if ! launchctl bootout "gui/$CONSOLE_UID/$ROTATE_LABEL" 2>/dev/null; then
-    launchctl unload "$ROTATE_AGENT_DST" 2>/dev/null || true
-  fi
+  unload_launch_agent "$LABEL" "$LAUNCH_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
+  unload_launch_agent "$ROTATE_LABEL" "$ROTATE_AGENT_DST" "$CONSOLE_USER" "$CONSOLE_UID"
 
   # Load main app LaunchAgent for current user using modern launchctl
   # Try bootstrap first (modern), fall back to load (legacy)

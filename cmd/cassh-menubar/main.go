@@ -410,10 +410,19 @@ func handleConnectionAction(connID string) {
 		return
 	}
 
+	// Find the connection index for UI updates
+	connIdx := -1
+	for i, c := range cfg.User.Connections {
+		if c.ID == connID {
+			connIdx = i
+			break
+		}
+	}
+
 	if conn.Type == config.ConnectionTypeEnterprise {
 		generateCertForConnection(conn)
 	} else {
-		refreshKeyForConnection(conn)
+		refreshKeyForConnection(conn, connIdx)
 	}
 }
 
@@ -491,7 +500,7 @@ func generateCertForConnection(conn *config.Connection) {
 }
 
 // refreshKeyForConnection handles key refresh for personal GitHub connection
-func refreshKeyForConnection(conn *config.Connection) {
+func refreshKeyForConnection(conn *config.Connection, connIdx int) {
 	// Check if gh CLI is authenticated
 	ghStatus := checkGHAuth()
 	if !ghStatus.Installed {
@@ -507,12 +516,20 @@ func refreshKeyForConnection(conn *config.Connection) {
 	if err := rotatePersonalGitHubSSH(conn); err != nil {
 		log.Printf("Failed to rotate key: %v", err)
 		sendNotification("cassh", fmt.Sprintf("Failed to rotate key: %v", err), false)
+		if connIdx >= 0 {
+			updateConnectionStatus(connIdx)
+		}
 		return
 	}
 
 	// Save updated connection config with new key ID and timestamp
 	if err := config.SaveUserConfig(&cfg.User); err != nil {
 		log.Printf("Failed to save config after key rotation: %v", err)
+	}
+
+	// Update UI immediately
+	if connIdx >= 0 {
+		updateConnectionStatus(connIdx)
 	}
 
 	sendNotification("cassh", fmt.Sprintf("SSH key rotated for %s", conn.Name), false)
@@ -1194,7 +1211,6 @@ func formatDuration(d time.Duration) string {
 
 	return fmt.Sprintf("%d minutes", minutes)
 }
-
 
 // uninstallCassh removes cassh and all its data from the system
 func uninstallCassh() {
@@ -2033,8 +2049,8 @@ func findGHBinary() string {
 
 	// Check common Homebrew locations
 	commonPaths := []string{
-		"/opt/homebrew/bin/gh",  // Apple Silicon
-		"/usr/local/bin/gh",     // Intel Mac
+		"/opt/homebrew/bin/gh",              // Apple Silicon
+		"/usr/local/bin/gh",                 // Intel Mac
 		"/home/linuxbrew/.linuxbrew/bin/gh", // Linux Homebrew
 	}
 
@@ -2199,9 +2215,16 @@ func findGitHubKeyIDByTitle(title string) string {
 	// Example: "cassh-personal-123    ssh-ed25519    AAAA...    2025-12-09T02:43:40Z    137889594    authentication"
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if strings.Contains(line, title) {
-			fields := strings.Fields(line)
-			if len(fields) >= 5 {
+		// Skip empty lines
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		// Need at least 5 fields: TITLE, TYPE, KEY, ADDED, KEY_ID (may have 6 with KEY_TYPE)
+		if len(fields) >= 5 {
+			// Use exact match on the title field (first field) to avoid false positives
+			// e.g., "cassh-personal-123" should not match "cassh-personal-1234"
+			if fields[0] == title {
 				// Key ID is the second-to-last field (last is "authentication" or "signing")
 				return fields[len(fields)-2]
 			}
@@ -2259,10 +2282,21 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 	log.Printf("Rotating SSH key for %s", conn.Name)
 
 	// 1. Delete old key from GitHub
-	if conn.GitHubKeyID != "" {
-		if err := deleteSSHKeyFromGitHub(conn.GitHubKeyID); err != nil {
-			log.Printf("Warning: failed to delete old key: %v", err)
+	keyID := conn.GitHubKeyID
+	if keyID == "" {
+		// Try to find by current title
+		keyID = findGitHubKeyIDByTitle(getKeyTitle(conn.ID))
+		if keyID == "" {
+			// Try to find by legacy title
+			keyID = findGitHubKeyIDByTitle(getLegacyKeyTitle(conn.ID))
+		}
+	}
+	if keyID != "" {
+		if err := deleteSSHKeyFromGitHub(keyID); err != nil {
+			log.Printf("Warning: failed to delete old key (ID: %s): %v", keyID, err)
 			// Continue anyway - we still want to generate a new key
+		} else {
+			log.Printf("Deleted old GitHub SSH key (ID: %s)", keyID)
 		}
 	}
 
@@ -2277,16 +2311,16 @@ func rotatePersonalGitHubSSH(conn *config.Connection) error {
 
 	// 4. Upload new key to GitHub
 	keyTitle := getKeyTitle(conn.ID)
-	keyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
+	newKeyID, err := uploadSSHKeyToGitHub(conn.SSHKeyPath, keyTitle)
 	if err != nil {
 		return fmt.Errorf("key upload failed: %w", err)
 	}
 
 	// 5. Update connection metadata
-	conn.GitHubKeyID = keyID
+	conn.GitHubKeyID = newKeyID
 	conn.KeyCreatedAt = time.Now().Unix()
 
-	log.Printf("SSH key rotated for %s (new key ID: %s)", conn.Name, keyID)
+	log.Printf("SSH key rotated for %s (new key ID: %s)", conn.Name, newKeyID)
 	return nil
 }
 
