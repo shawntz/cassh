@@ -65,8 +65,32 @@ void handleCasshURL(char* url);
 }
 @end
 
+// UI delegate to handle JavaScript alerts and confirms
+@interface WebViewUIDelegate : NSObject <WKUIDelegate>
+@end
+
+@implementation WebViewUIDelegate
+- (void)webView:(WKWebView *)webView runJavaScriptAlertPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(void))completionHandler {
+    NSAlert *alert = [[NSAlert alloc] init];
+    [alert setMessageText:message];
+    [alert addButtonWithTitle:@"OK"];
+    [alert runModal];
+    completionHandler();
+}
+
+- (void)webView:(WKWebView *)webView runJavaScriptConfirmPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(BOOL))completionHandler {
+    NSAlert *alert = [[NSAlert alloc] init];
+    [alert setMessageText:message];
+    [alert addButtonWithTitle:@"OK"];
+    [alert addButtonWithTitle:@"Cancel"];
+    NSModalResponse response = [alert runModal];
+    completionHandler(response == NSAlertFirstButtonReturn);
+}
+@end
+
 static WebViewDelegate* navDelegate = nil;
 static WindowDelegate* windowDelegate = nil;
+static WebViewUIDelegate* uiDelegate = nil;
 
 // Setup Edit menu for copy/paste support
 void setupEditMenu() {
@@ -201,6 +225,12 @@ void openWebViewWindow(const char* urlStr, const char* title, int width, int hei
             navDelegate = [[WebViewDelegate alloc] init];
         }
         webView.navigationDelegate = navDelegate;
+
+        // Set UI delegate for JavaScript alerts/confirms
+        if (uiDelegate == nil) {
+            uiDelegate = [[WebViewUIDelegate alloc] init];
+        }
+        webView.UIDelegate = uiDelegate;
 
         // Add webview to container
         [containerView addSubview:webView];
