@@ -30,8 +30,14 @@ type PolicyConfig struct {
 	// Server endpoints
 	ServerBaseURL string `toml:"server_base_url"`
 
+	// Platform configuration (GitHub or GitLab)
+	Platform string `toml:"platform"` // "github" or "gitlab"
+
 	// GitHub Enterprise
 	GitHubEnterpriseURL string `toml:"github_enterprise_url"`
+
+	// GitLab Enterprise
+	GitLabEnterpriseURL string `toml:"gitlab_enterprise_url"`
 
 	// OIDC / Entra settings
 	OIDCIssuer   string `toml:"oidc_issuer"`
@@ -51,7 +57,15 @@ func (p *PolicyConfig) IsDevMode() bool {
 	return p.DevMode || p.OIDCTenantID == ""
 }
 
-// ConnectionType identifies the type of GitHub connection
+// Platform identifies the git platform (GitHub or GitLab)
+type Platform string
+
+const (
+	PlatformGitHub Platform = "github"
+	PlatformGitLab Platform = "gitlab"
+)
+
+// ConnectionType identifies the type of connection
 type ConnectionType string
 
 const (
@@ -59,40 +73,117 @@ const (
 	ConnectionTypePersonal   ConnectionType = "personal"
 )
 
-// Connection represents a single GitHub connection (enterprise or personal)
+// Connection represents a single git platform connection (enterprise or personal, GitHub or GitLab)
 type Connection struct {
 	// Unique identifier for this connection
 	ID string `toml:"id"`
 
+	// Platform: "github" or "gitlab"
+	Platform Platform `toml:"platform"`
+
 	// Type of connection: "enterprise" or "personal"
 	Type ConnectionType `toml:"type"`
 
-	// Display name (e.g., "GitHub Enterprise" or "GitHub.com")
+	// Display name (e.g., "GitHub Enterprise", "GitLab.com", etc.)
 	Name string `toml:"name"`
 
 	// For enterprise: the cassh server URL
 	ServerURL string `toml:"server_url,omitempty"`
 
-	// For enterprise: the GitHub Enterprise hostname (e.g., "github.yourcompany.com")
-	// For personal: "github.com"
-	GitHubHost string `toml:"github_host"`
+	// Platform hostname
+	// For GitHub: "github.com" or "github.yourcompany.com"
+	// For GitLab: "gitlab.com" or "gitlab.yourcompany.com"
+	Host string `toml:"host"`
 
-	// GitHub username for SSH connections
-	// For enterprise: the SSH username from clone URL (e.g., "yourcorp_123456" from "yourcorp_123456@yourcorp.ghe.com:org/repo.git")
-	// For personal: GitHub username (from gh auth)
-	GitHubUsername string `toml:"github_username,omitempty"`
+	// SSH username for connections
+	// For GitHub Enterprise: the SSH username from clone URL (e.g., "yourcorp_123456")
+	// For GitHub Personal: GitHub username (from gh auth)
+	// For GitLab: GitLab username
+	Username string `toml:"username,omitempty"`
 
 	// SSH key paths for this connection
 	SSHKeyPath  string `toml:"ssh_key_path"`
 	SSHCertPath string `toml:"ssh_cert_path,omitempty"` // Only for enterprise
 
 	// For personal: key rotation settings
-	KeyRotationHours int    `toml:"key_rotation_hours,omitempty"` // 0 = no rotation
-	KeyCreatedAt     int64  `toml:"key_created_at,omitempty"`     // Unix timestamp
-	GitHubKeyID      string `toml:"github_key_id,omitempty"`      // GitHub SSH key ID for deletion
+	KeyRotationHours int   `toml:"key_rotation_hours,omitempty"` // 0 = no rotation
+	KeyCreatedAt     int64 `toml:"key_created_at,omitempty"`     // Unix timestamp
+
+	// SSH Key IDs for deletion on personal connections
+	// Note: GitHub uses string IDs while GitLab uses integer IDs due to
+	// differences in their respective API designs
+	GitHubKeyID string `toml:"github_key_id,omitempty"` // For GitHub personal
+	GitLabKeyID int    `toml:"gitlab_key_id,omitempty"` // For GitLab personal
+
+	// For GitLab personal: Personal Access Token for API authentication
+	// This is stored in user config since it's user-specific
+	// For security, consider using system keychain in future
+	GitLabToken string `toml:"gitlab_token,omitempty"`
+
+	// Deprecated fields (for backwards compatibility with GitHub-only configs)
+	GitHubHost     string `toml:"github_host,omitempty"`     // Use Host instead
+	GitHubUsername string `toml:"github_username,omitempty"` // Use Username instead
 
 	// Connection status (not persisted, runtime only)
 	IsActive bool `toml:"-"`
+}
+
+// IsGitHub returns true if this is a GitHub connection.
+//
+// NOTE: For historical reasons, an empty Platform value is treated as GitHub.
+// Older configs did not persist the Platform field at all, so connections created
+// before Platform was introduced will have Platform == "" and must continue to be
+// interpreted as GitHub. Do not change this behavior unless you also provide a
+// migration path for existing user configurations.
+func (c *Connection) IsGitHub() bool {
+	return c.Platform == PlatformGitHub || c.Platform == ""
+}
+
+// IsGitLab returns true if this is a GitLab connection
+func (c *Connection) IsGitLab() bool {
+	return c.Platform == PlatformGitLab
+}
+
+// GetHost returns the platform hostname, handling deprecated fields
+func (c *Connection) GetHost() string {
+	if c.Host != "" {
+		return c.Host
+	}
+	// Backwards compatibility
+	if c.GitHubHost != "" {
+		return c.GitHubHost
+	}
+	return ""
+}
+
+// GetUsername returns the username, handling deprecated fields
+func (c *Connection) GetUsername() string {
+	if c.Username != "" {
+		return c.Username
+	}
+	// Backwards compatibility
+	if c.GitHubUsername != "" {
+		return c.GitHubUsername
+	}
+	return ""
+}
+
+// MigrateDeprecatedFields migrates old GitHub-only fields to new platform-agnostic fields
+func (c *Connection) MigrateDeprecatedFields() {
+	// If platform is empty, default to GitHub
+	if c.Platform == "" {
+		c.Platform = PlatformGitHub
+	}
+
+	// Migrate host field
+	if c.Host == "" && c.GitHubHost != "" {
+		c.Host = c.GitHubHost
+	}
+
+	// Migrate username field
+	if c.Username == "" && c.GitHubUsername != "" {
+		c.Username = c.GitHubUsername
+	}
 }
 
 // UserConfig contains user-editable prefs
@@ -191,13 +282,21 @@ type ServerConfig struct {
 	CAPrivateKeyPath string `toml:"ca_private_key_path"`
 	CAPrivateKey     string `toml:"-"` // Loaded from file or env, never from TOML directly
 
+	// Platform configuration
+	Platform string `toml:"platform"` // "github" or "gitlab"
+
 	// GitHub settings
 	GitHubEnterpriseURL string   `toml:"github_enterprise_url"`
 	GitHubAllowedOrgs   []string `toml:"github_allowed_orgs"`
-					PrincipalSource string   `toml:"principal_source"`
 	// PrincipalSource determines how to derive the SSH certificate principal from OIDC claims
 	// Options: "email_prefix" (default), "email", "username", or a custom claim name
 	GitHubPrincipalSource string `toml:"github_principal_source"`
+
+	// GitLab settings
+	GitLabEnterpriseURL string   `toml:"gitlab_enterprise_url"`
+	GitLabAllowedGroups []string `toml:"gitlab_allowed_groups"`
+	// PrincipalSource for GitLab (same options as GitHub)
+	GitLabPrincipalSource string `toml:"gitlab_principal_source"`
 
 	// Devel mode
 	DevMode bool `toml:"dev_mode"`
@@ -215,8 +314,11 @@ type ServerConfig struct {
 //   - CASSH_OIDC_REDIRECT_URL
 //   - CASSH_CA_PRIVATE_KEY (raw key content)
 //   - CASSH_CA_PRIVATE_KEY_PATH (path to key file)
+//   - CASSH_PLATFORM (github or gitlab)
 //   - CASSH_GITHUB_ENTERPRISE_URL
 //   - CASSH_GITHUB_PRINCIPAL_SOURCE (email_prefix, email, username)
+//   - CASSH_GITLAB_ENTERPRISE_URL
+//   - CASSH_GITLAB_PRINCIPAL_SOURCE (email_prefix, email, username)
 //   - CASSH_DEV_MODE
 func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 	config := &ServerConfig{
@@ -240,11 +342,17 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 				CA struct {
 					PrivateKeyPath string `toml:"private_key_path"`
 				} `toml:"ca"`
-				GitHub struct {
-					EnterpriseURL string   `toml:"enterprise_url"`
-					AllowedOrgs   []string `toml:"allowed_orgs"`
+				Platform string `toml:"platform"`
+				GitHub   struct {
+					EnterpriseURL   string   `toml:"enterprise_url"`
+					AllowedOrgs     []string `toml:"allowed_orgs"`
 					PrincipalSource string   `toml:"principal_source"`
 				} `toml:"github"`
+				GitLab struct {
+					EnterpriseURL   string   `toml:"enterprise_url"`
+					AllowedGroups   []string `toml:"allowed_groups"`
+					PrincipalSource string   `toml:"principal_source"`
+				} `toml:"gitlab"`
 			}
 
 			if err := toml.Unmarshal(data, &fileConfig); err != nil {
@@ -256,6 +364,7 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 				config.CertValidityHours = fileConfig.CertValidityHours
 			}
 			config.DevMode = fileConfig.DevMode
+			config.Platform = fileConfig.Platform
 			config.OIDCClientID = fileConfig.OIDC.ClientID
 			config.OIDCClientSecret = fileConfig.OIDC.ClientSecret
 			config.OIDCTenant = fileConfig.OIDC.Tenant
@@ -264,6 +373,9 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 			config.GitHubEnterpriseURL = fileConfig.GitHub.EnterpriseURL
 			config.GitHubAllowedOrgs = fileConfig.GitHub.AllowedOrgs
 			config.GitHubPrincipalSource = fileConfig.GitHub.PrincipalSource
+			config.GitLabEnterpriseURL = fileConfig.GitLab.EnterpriseURL
+			config.GitLabAllowedGroups = fileConfig.GitLab.AllowedGroups
+			config.GitLabPrincipalSource = fileConfig.GitLab.PrincipalSource
 		}
 	}
 
@@ -294,8 +406,22 @@ func LoadServerConfig(policyPath string) (*ServerConfig, error) {
 	if v := os.Getenv("CASSH_GITHUB_ENTERPRISE_URL"); v != "" {
 		config.GitHubEnterpriseURL = v
 	}
+	if v := os.Getenv("CASSH_PLATFORM"); v != "" {
+		platform := strings.ToLower(v)
+		if platform == "github" || platform == "gitlab" {
+			config.Platform = platform
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: invalid CASSH_PLATFORM value %q; expected \"github\" or \"gitlab\". Keeping existing platform configuration.\n", v)
+		}
+	}
 	if v := os.Getenv("CASSH_GITHUB_PRINCIPAL_SOURCE"); v != "" {
 		config.GitHubPrincipalSource = v
+	}
+	if v := os.Getenv("CASSH_GITLAB_ENTERPRISE_URL"); v != "" {
+		config.GitLabEnterpriseURL = v
+	}
+	if v := os.Getenv("CASSH_GITLAB_PRINCIPAL_SOURCE"); v != "" {
+		config.GitLabPrincipalSource = v
 	}
 	if v := os.Getenv("CASSH_DEV_MODE"); v == "true" || v == "1" {
 		config.DevMode = true
@@ -407,9 +533,9 @@ func LoadUserConfig() (*UserConfig, error) {
 			return nil, fmt.Errorf("failed to parse dotfiles config: %w", err)
 		}
 
-		// Validate config values
-		if err := config.Validate(); err != nil {
-			return nil, fmt.Errorf("invalid dotfiles config: %w", err)
+		// Migrate deprecated fields for backwards compatibility
+		for i := range config.Connections {
+			config.Connections[i].MigrateDeprecatedFields()
 		}
 
 		// Mark that we're using dotfiles config
@@ -439,9 +565,9 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to parse user config: %w", err)
 	}
 
-	// Validate config values
-	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid user config: %w", err)
+	// Migrate deprecated fields for backwards compatibility
+	for i := range config.Connections {
+		config.Connections[i].MigrateDeprecatedFields()
 	}
 
 	return &config, nil

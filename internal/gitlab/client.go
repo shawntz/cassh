@@ -1,0 +1,262 @@
+package gitlab
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+const (
+	// errFailedToReadResponseBody is the fallback error message when reading the response body fails
+	errFailedToReadResponseBody = "failed to read response body"
+)
+
+// Client represents a GitLab API client
+type Client struct {
+	baseURL string
+	token   string
+	client  *http.Client
+}
+
+// SSHKey represents a GitLab SSH key
+type SSHKey struct {
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Key       string     `json:"key"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+// NewClient creates a new GitLab API client
+// baseURL should be the GitLab instance URL (e.g., "https://gitlab.com" or "https://gitlab.company.com")
+// token is a personal access token with `api` scope
+func NewClient(baseURL, token string) (*Client, error) {
+	// Validate token is not empty
+	if token == "" {
+		return nil, fmt.Errorf("token cannot be empty")
+	}
+
+	// Remove trailing slash
+	baseURL = strings.TrimSuffix(baseURL, "/")
+
+	return &Client{
+		baseURL: baseURL,
+		token:   token,
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}, nil
+}
+
+// sanitizeErrorMessage extracts a safe error message from the response body
+// without exposing potentially sensitive information
+func sanitizeErrorMessage(body []byte) string {
+	// Try to parse as JSON and extract only the message field
+	var errResponse struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	
+	if err := json.Unmarshal(body, &errResponse); err == nil {
+		if errResponse.Message != "" {
+			return errResponse.Message
+		}
+		if errResponse.Error != "" {
+			return errResponse.Error
+		}
+	}
+	
+	// If we can't parse the JSON or there's no message field,
+	// return a generic error message to avoid exposing sensitive data
+	return "API request failed (response body omitted for security)"
+}
+
+// doRequest performs an HTTP request with authentication
+func (c *Client) doRequest(method, endpoint string, body interface{}) (*http.Response, error) {
+	var reqBody io.Reader
+	if body != nil {
+		jsonData, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		reqBody = bytes.NewBuffer(jsonData)
+	}
+
+	requestURL := c.baseURL + endpoint
+	req, err := http.NewRequest(method, requestURL, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authentication header
+	req.Header.Set("PRIVATE-TOKEN", c.token)
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+// sanitizeAPIError creates a safe error message from an API response without exposing sensitive data
+func sanitizeAPIError(operation string, statusCode int) error {
+	return fmt.Errorf("%s: API request failed with status %d", operation, statusCode)
+}
+
+// ListSSHKeys retrieves all SSH keys for the authenticated user
+func (c *Client) ListSSHKeys() ([]SSHKey, error) {
+	resp, err := c.doRequest("GET", "/api/v4/user/keys", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, sanitizeAPIError("failed to list SSH keys", resp.StatusCode)
+	}
+	var keys []SSHKey
+	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return keys, nil
+}
+
+// GetSSHKeyByTitle finds an SSH key by its title
+func (c *Client) GetSSHKeyByTitle(title string) (*SSHKey, error) {
+	keys, err := c.ListSSHKeys()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		if key.Title == title {
+			return &key, nil
+		}
+	}
+
+	return nil, nil // Not found
+}
+
+// CreateSSHKey adds a new SSH key to the authenticated user's account
+func (c *Client) CreateSSHKey(title, publicKey string, expiresAt *time.Time) (*SSHKey, error) {
+	payload := map[string]interface{}{
+		"title": title,
+		"key":   strings.TrimSpace(publicKey),
+	}
+
+	if expiresAt != nil {
+		payload["expires_at"] = expiresAt.Format("2006-01-02")
+	}
+
+	resp, err := c.doRequest("POST", "/api/v4/user/keys", payload)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Success case - decode response directly without reading into memory first
+	if resp.StatusCode == http.StatusCreated {
+		var key SSHKey
+		if err := json.NewDecoder(resp.Body).Decode(&key); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+		return &key, nil
+	}
+
+	// Error case - read body for error details
+	body, _ := io.ReadAll(resp.Body)
+	
+	// GitLab returns 400 Bad Request when a key with the same title or content already exists
+	// Check if this is a duplicate key error before making additional API calls
+	if resp.StatusCode == http.StatusBadRequest && strings.Contains(string(body), "has already been taken") {
+		// Try to find the existing key
+		existingKey, err := c.GetSSHKeyByTitle(title)
+		if err != nil {
+			return nil, fmt.Errorf("key already exists but failed to retrieve it: %w", err)
+		}
+		if existingKey != nil {
+			return existingKey, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("failed to create SSH key: %s (status: %d)", string(body), resp.StatusCode)
+}
+
+// DeleteSSHKey removes an SSH key by ID
+func (c *Client) DeleteSSHKey(keyID int) error {
+	endpoint := fmt.Sprintf("/api/v4/user/keys/%d", keyID)
+	resp, err := c.doRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		// Key might already be deleted
+		if resp.StatusCode == http.StatusNotFound {
+			return nil
+		}
+		return sanitizeAPIError("failed to delete SSH key", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// GetCurrentUser retrieves information about the authenticated user
+func (c *Client) GetCurrentUser() (map[string]interface{}, error) {
+	resp, err := c.doRequest("GET", "/api/v4/user", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, sanitizeAPIError("failed to get user info", resp.StatusCode)
+	}
+
+	var user map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return user, nil
+}
+
+// ValidateToken checks if the token is valid by attempting to get current user
+func (c *Client) ValidateToken() error {
+	_, err := c.GetCurrentUser()
+	return err
+}
+
+// ExtractHostFromURL extracts the hostname from a GitLab URL
+// Example: "https://gitlab.company.com" -> "gitlab.company.com"
+func ExtractHostFromURL(gitlabURL string) string {
+	parsed, err := url.Parse(gitlabURL)
+	if err != nil || parsed.Hostname() == "" {
+		// If parsing fails or no hostname, try to extract manually
+		gitlabURL = strings.TrimPrefix(gitlabURL, "https://")
+		gitlabURL = strings.TrimPrefix(gitlabURL, "http://")
+		gitlabURL = strings.TrimSuffix(gitlabURL, "/")
+		// Remove port if present
+		if idx := strings.Index(gitlabURL, ":"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		// Remove path if present
+		if idx := strings.Index(gitlabURL, "/"); idx != -1 {
+			gitlabURL = gitlabURL[:idx]
+		}
+		return gitlabURL
+	}
+	return parsed.Hostname()
+}
