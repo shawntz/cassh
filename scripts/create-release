@@ -167,7 +167,12 @@ echo ""
 
 # Push changes and tag
 echo "Pushing to origin..."
-git push origin main
+CURRENT_BRANCH="$(git branch --show-current)"
+if [ -z "$CURRENT_BRANCH" ]; then
+    echo -e "${RED}✗ Unable to determine current git branch (detached HEAD?). Aborting push.${NC}" >&2
+    exit 1
+fi
+git push origin "$CURRENT_BRANCH"
 git push origin "$TAG"
 
 echo ""
