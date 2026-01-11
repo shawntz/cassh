@@ -68,8 +68,10 @@ extract_commits() {
             commit_hash=$(echo "$line" | awk '{print $1}')
             commit_msg=$(echo "$line" | cut -d' ' -f2- | sed "s/^${type}://i" | sed 's/^ *//')
 
-            # Capitalize first letter
-            commit_msg="$(echo "${commit_msg:0:1}" | tr '[:lower:]' '[:upper:]')${commit_msg:1}"
+            # Capitalize first letter if message is not empty
+            if [ -n "$commit_msg" ]; then
+                commit_msg="$(echo "${commit_msg:0:1}" | tr '[:lower:]' '[:upper:]')${commit_msg:1}"
+            fi
 
             echo "- ${commit_msg} (${commit_hash})"
         done <<< "$commits"
