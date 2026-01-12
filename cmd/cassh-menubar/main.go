@@ -1596,7 +1596,7 @@ func handleInstallCert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write cert
-	if err := os.WriteFile(certPath, []byte(req.Cert), 0644); err != nil {
+	if err := os.WriteFile(certPath, []byte(req.Cert), 0600); err != nil {
 		log.Printf("Failed to write cert: %v", err)
 		http.Error(w, "Failed to save certificate", http.StatusInternalServerError)
 		return

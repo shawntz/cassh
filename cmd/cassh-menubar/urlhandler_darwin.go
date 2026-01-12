@@ -204,7 +204,7 @@ func handleInstallCertURL(u *url.URL) {
 	}
 
 	// Write cert
-	if err := os.WriteFile(certPath, []byte(cert), 0644); err != nil {
+	if err := os.WriteFile(certPath, []byte(cert), 0600); err != nil {
 		log.Printf("Failed to write cert: %v", err)
 		sendNotification("cassh Error", "Failed to save certificate", false)
 		return
