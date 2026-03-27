@@ -1,5 +1,32 @@
 # cassh Scripts
 
+## Release Management
+
+- **generate-changelog** - Generate changelog from git commits
+  ```bash
+  ./scripts/generate-changelog                    # From last tag to HEAD
+  ./scripts/generate-changelog v1.0.0 v1.1.0     # Between specific refs
+  ```
+
+  Uses [conventional commits](https://www.conventionalcommits.org/) to categorize changes:
+  - `feat:` → Added
+  - `fix:` → Fixed
+  - `docs:` → Documentation
+  - `chore:`, `test:`, `ci:`, etc.
+
+- **create-release** - Create a new release with automated changelog
+  ```bash
+  ./scripts/create-release 1.2.0
+  ```
+
+  Interactive script that:
+  1. Generates changelog from commits
+  2. Updates `CHANGELOG.md`
+  3. Creates git tag `v1.2.0`
+  4. Pushes tag to trigger release workflow
+
+  See [docs/releases.md](../docs/releases.md) for full documentation.
+
 ## Build & Test
 
 - **test-release** - Test release builds locally before publishing
