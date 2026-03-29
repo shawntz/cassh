@@ -116,7 +116,12 @@ cp ~/Library/Application\ Support/cassh/config.toml ~/.config/cassh/config.toml
 - `cmd/cassh-menubar/main.go` - Menu bar app with loopback listener and URL scheme handler
 - `cmd/cassh-menubar/urlhandler_darwin.go` - `cassh://` URL scheme handling for certificate installation
 - `cmd/cassh-menubar/webview_darwin.go` - Native WebKit window for setup wizard (seamless titlebar, Edit menu)
-- `cmd/cassh-menubar/updater.go` - GitHub Releases update checker with AppleScript dialogs
+- `cmd/cassh-menubar/updater.go` - GitHub Releases update checker with persistent notifications and AppleScript dialogs
+  - Automatic periodic checks (configurable interval, default: daily)
+  - Persistent notifications via macOS Notification Center (every 6 hours by default)
+  - Dismissible updates (stop notifications for specific versions)
+  - Visual menu bar indicator (🔔 emoji when update available)
+  - Native notifications and dialogs for user-friendly experience
 - `cmd/cassh-menubar/share_darwin.go` - Native share popup dialog with copy button
 - `cmd/cassh-menubar/about_darwin.go` - Native about window
 - `cmd/cassh-menubar/appvisibility_darwin.go` - Dock visibility toggle (NSApplicationActivationPolicy)
